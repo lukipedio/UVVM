@@ -1,60 +1,64 @@
-#========================================================================================================================
-# Copyright (c) 2017 by Bitvis AS.  All rights reserved.
-# You should have received a copy of the license file containing the MIT License (see LICENSE.TXT), if not, 
-# contact Bitvis AS <support@bitvis.no>.
+#================================================================================================================================
+# Copyright 2020 Bitvis
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 and in the provided LICENSE.TXT.
 #
-# UVVM AND ANY PART THEREOF ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH UVVM OR THE USE OR
-# OTHER DEALINGS IN UVVM.
-#========================================================================================================================
+# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+# an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and limitations under the License.
+#================================================================================================================================
+# Note : Any functionality not explicitly described in the documentation is subject to change at any time
+#--------------------------------------------------------------------------------------------------------------------------------
 
-# This file may be called with an argument
-# arg 1: Part directory of this library/module
+#-----------------------------------------------------------------------
+# List dependencies
+#-----------------------------------------------------------------------
+echo "********************* DEPENDENCIES ***************************"
+echo "1. UVVM Utility library"
+echo "2. UVVM VVC Framework library"
+echo "3. Bitvis VIP Scoreboard"
+echo "4. Bitvis VIP SBI"
+echo "**************************************************************"
 
-if {[batch_mode]} {
-  onerror {abort all; exit -f -code 1}
-} else {
-  onerror {abort all}
+#-----------------------------------------------------------------------
+# This file may be called with 0 to 2 arguments:
+#
+#   0 args: regular UVVM directory structure expected
+#   1 args: source directory specified, target will be current directory
+#   2 args: source directory and target directory specified
+#-----------------------------------------------------------------------
+
+# Overload quietly (Modelsim specific command) to let it work in Riviera-Pro
+proc quietly { args } {
+  if {[llength $args] == 0} {
+    puts "quietly"
+  } else {
+    # this works since tcl prompt only prints the last command given. list prints "".
+    uplevel $args; list;
+  }
 }
-quit -sim   #Just in case...
 
-###########
-# Fix possible vmap bug
-do fix_vmap.tcl 
-##########
-
-# Set up irqc_part_path and lib_name
-#------------------------------------------------------
-quietly set lib_name "bitvis_irqc"
-quietly set part_name "bitvis_irqc"
-# path from mpf-file in sim
-quietly set irqc_part_path "../..//$part_name"
-
+#-----------------------------------------------------------------------
+# Set up source_path and target_path
+#-----------------------------------------------------------------------
 if { [info exists 1] } {
-  # path from this part to target part
-  quietly set irqc_part_path "$1/..//$part_name"
+  quietly set source_path "$1"
+
+  if {$argc == 1} {
+    echo "\nUser specified source directory"
+    quietly set target_path "$source_path/sim"
+  } elseif {$argc >= 2} {
+    echo "\nUser specified source and target directory"
+    quietly set target_path "$2"
+  }
   unset 1
+} else {
+  echo "\nDefault output directory"
+  quietly set source_path ".."
+  quietly set target_path "$source_path/sim"
 }
 
-
-# (Re-)Generate library and Compile source files
-#--------------------------------------------------
-echo "\n\nRe-gen lib and compile $lib_name source\n"
-if {[file exists $irqc_part_path/sim/$lib_name]} {
-  file delete -force $irqc_part_path/sim/$lib_name
-}
-if {![file exists $irqc_part_path/sim]} {
-  file mkdir $irqc_part_path/sim
-}
-
-vlib $irqc_part_path/sim/$lib_name
-vmap $lib_name $irqc_part_path/sim/$lib_name
-
-set compdirectives "-2008 -work $lib_name"
-
-eval vcom  $compdirectives  $irqc_part_path/src/irqc_pif_pkg.vhd
-eval vcom  $compdirectives  $irqc_part_path/src/irqc_pif.vhd
-eval vcom  $compdirectives  $irqc_part_path/src/irqc_core.vhd
-eval vcom  $compdirectives  $irqc_part_path/src/irqc.vhd
+#-----------------------------------------------------------------------
+# Call top-level compile script with local library arguments
+#-----------------------------------------------------------------------
+do $source_path/../script/compile_src.do $source_path $target_path

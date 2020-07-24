@@ -1,13 +1,14 @@
---========================================================================================================================
--- Copyright (c) 2017 by Bitvis AS.  All rights reserved.
--- You should have received a copy of the license file containing the MIT License (see LICENSE.TXT), if not,
--- contact Bitvis AS <support@bitvis.no>.
+--================================================================================================================================
+-- Copyright 2020 Bitvis
+-- Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 and in the provided LICENSE.TXT.
 --
--- UVVM AND ANY PART THEREOF ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
--- WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
--- OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
--- OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH UVVM OR THE USE OR OTHER DEALINGS IN UVVM.
---========================================================================================================================
+-- Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+-- an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and limitations under the License.
+--================================================================================================================================
+-- Note : Any functionality not explicitly described in the documentation is subject to change at any time
+----------------------------------------------------------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------------------
 -- Description   : See library quick reference (under 'doc') and README-file(s)
@@ -21,6 +22,7 @@ use IEEE.numeric_std.all;
 library ieee;
 use ieee.std_logic_1164.all;
 use std.textio.all;
+use ieee.math_real.all;
 
 
 
@@ -37,15 +39,6 @@ package string_methods_pkg is
     scope      : string
     );
 
-  function justify(
-    val             : string;
-    justified       : side;
-    width           : natural;
-    format_spaces   : t_format_spaces;
-    truncate        : t_truncate_string
-  ) return string;
-
-
   -- DEPRECATED.
   -- Function will be removed in future versions of UVVM-Util
   function justify(
@@ -55,6 +48,23 @@ package string_methods_pkg is
     format: t_format_string := AS_IS -- No defaults on 4 first param - to avoid ambiguity with std.textio
     ) return string;
 
+  -- DEPRECATED.
+  -- Function will be removed in future versions of UVVM-Util
+  function justify(
+    val             : string;
+    justified       : side;
+    width           : natural;
+    format_spaces   : t_format_spaces;
+    truncate        : t_truncate_string
+    ) return string;
+
+  function justify(
+    val             : string;
+    justified       : t_justify_center;
+    width           : natural;
+    format_spaces   : t_format_spaces;
+    truncate        : t_truncate_string
+    ) return string;
 
   function pos_of_leftmost(
     target              : character;
@@ -129,8 +139,11 @@ package string_methods_pkg is
     side  : side := LEFT
     ) return string;
 
-
   function replace_backslash_n_with_lf(
+    source : string
+    ) return string;
+
+  function replace_backslash_r_with_lf(
     source : string
     ) return string;
 
@@ -186,7 +199,17 @@ package string_methods_pkg is
     width           : natural;
     justified       : side;
     format_spaces   : t_format_spaces;
-    truncate        : t_truncate_string := DISALLOW_TRUNCATE
+    truncate        : t_truncate_string := DISALLOW_TRUNCATE;
+    radix           : t_radix := DEC;
+    prefix          : t_radix_prefix := EXCL_RADIX;
+    format          : t_format_zeros := SKIP_LEADING_0 -- | KEEP_LEADING_0
+    ) return string;
+
+  function to_string(
+    val             : integer;
+    radix           : t_radix;
+    prefix          : t_radix_prefix;
+    format          : t_format_zeros := SKIP_LEADING_0 -- | KEEP_LEADING_0
     ) return string;
 
   -- This function has been deprecated and will be removed in the next major release
@@ -224,13 +247,6 @@ package string_methods_pkg is
   function to_string(
     val     : signed;
     radix   : t_radix;
-    format  : t_format_zeros := KEEP_LEADING_0;  -- | SKIP_LEADING_0
-    prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
-    ) return string;
-
-  function to_string(
-    val     : t_byte_array;
-    radix   : t_radix        := HEX_BIN_IF_INVALID;
     format  : t_format_zeros := KEEP_LEADING_0;  -- | SKIP_LEADING_0
     prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
     ) return string;
@@ -277,11 +293,22 @@ package string_methods_pkg is
     justified : side    := right
       ) return string;
 
+  function to_string(
+    val       : t_check_type;
+    width     : natural;
+    justified : side    := right
+    ) return string;
+    
   procedure to_string(
     val   : t_alert_attention_counters;
     order : t_order := FINAL
     );
 
+  procedure to_string(
+    val   : t_check_counters_array;
+    order : t_order := FINAL
+    );
+    
   function ascii_to_char(
     ascii_pos   : integer range 0 to 255;
     ascii_allow : t_ascii_allow := ALLOW_ALL
@@ -405,8 +432,7 @@ package body string_methods_pkg is
     return result;
   end function;
 
-
-
+  -- This procedure has been deprecated, and will be removed in the near future.
   function justify(
     val             : string;
     justified       : side;
@@ -416,18 +442,18 @@ package body string_methods_pkg is
   ) return string is
     variable v_val_length         : natural := val'length;
     variable v_formatted_val      : string (1 to val'length);
-    variable v_num_leading_space  : natural := 1;
+    variable v_num_leading_space  : natural := 0;
     variable v_result             : string(1 to width) := (others => ' ');
   begin
     -- Remove leading space if format_spaces is SKIP_LEADING_SPACE
     if format_spaces = SKIP_LEADING_SPACE then
       -- Find how many leading spaces there are
-      while( (val(v_num_leading_space) = ' ') and (v_num_leading_space < v_val_length)) loop
+      while( (val(v_num_leading_space+1) = ' ') and (v_num_leading_space < v_val_length)) loop
         v_num_leading_space := v_num_leading_space + 1;
       end loop;
       -- Remove leading space if any
-      v_formatted_val := remove_initial_chars(val,v_num_leading_space);
-      v_val_length := v_formatted_val'length;
+      v_formatted_val := pad_string(remove_initial_chars(val,v_num_leading_space),' ',v_formatted_val'length,LEFT);
+      v_val_length    := v_val_length - v_num_leading_space;
     else
       v_formatted_val := val;
     end if;
@@ -437,16 +463,59 @@ package body string_methods_pkg is
       if (truncate = ALLOW_TRUNCATE) then
         return v_formatted_val(1 to width);
       else
-        return v_formatted_val;
+        return v_formatted_val(1 to v_val_length);
       end if;
     end if;
 
     -- Justify if string is within the width specifications
     if justified = left then
-      v_result(1 to v_val_length) := v_formatted_val;
+      v_result(1 to v_val_length) := v_formatted_val(1 to v_val_length);
     elsif justified = right then
-      v_result(width - v_val_length + 1 to width) := v_formatted_val;
+      v_result(width - v_val_length + 1 to width) := v_formatted_val(1 to v_val_length);
     end if;
+
+    return v_result;
+  end function;
+
+  function justify(
+    val             : string;
+    justified       : t_justify_center;
+    width           : natural;
+    format_spaces   : t_format_spaces;
+    truncate        : t_truncate_string
+  ) return string is
+    variable v_val_length         : natural := val'length;
+    variable v_start_pos          : natural;
+    variable v_formatted_val      : string (1 to val'length);
+    variable v_num_leading_space  : natural := 0;
+    variable v_result             : string(1 to width) := (others => ' ');
+  begin
+    -- Remove leading space if format_spaces is SKIP_LEADING_SPACE
+    if format_spaces = SKIP_LEADING_SPACE then
+      -- Find how many leading spaces there are
+      while( (val(v_num_leading_space+1) = ' ') and (v_num_leading_space < v_val_length)) loop
+        v_num_leading_space := v_num_leading_space + 1;
+      end loop;
+      -- Remove leading space if any
+      v_formatted_val := pad_string(remove_initial_chars(val,v_num_leading_space),' ',v_formatted_val'length,LEFT);
+      v_val_length    := v_val_length - v_num_leading_space;
+    else
+      v_formatted_val := val;
+    end if;
+
+    -- Truncate and return if the string is wider that allowed
+    if v_val_length >= width then
+      if (truncate = ALLOW_TRUNCATE) then
+        return v_formatted_val(1 to width);
+      else
+        return v_formatted_val(1 to v_val_length);
+      end if;
+    end if;
+
+    -- Justify if string is within the width specifications
+    v_start_pos  := natural(ceil((real(width)-real(v_val_length))/real(2))) + 1;
+    v_result(v_start_pos to v_start_pos + v_val_length-1) := v_formatted_val(1 to v_val_length);
+
     return v_result;
   end function;
 
@@ -614,6 +683,7 @@ package body string_methods_pkg is
       write(v_msg_line, string'(" "));
     end if;
     bitvis_assert(v_line'length > 0, ERROR, "No procedure name found. " & v_msg_line.all, "get_procedure_name_from_instance_name()");
+    DEALLOCATE(v_msg_line);
     return v_line.all;
   end;
 
@@ -734,6 +804,33 @@ package body string_methods_pkg is
       end if;
       return v_dest(1 to v_dest_idx);
     end if;
+  end;
+
+  function replace_backslash_r_with_lf(
+    source : string
+    ) return string is
+    variable v_source_idx : natural := 0;
+    variable v_dest_idx   : natural := 0;
+    variable v_dest       : string(1 to source'length);
+  begin
+    if source'length = 0 then
+      return "";
+    else
+      if C_USE_BACKSLASH_R_AS_LF then
+        loop
+          if (source(v_source_idx to v_source_idx+1) = "\r") then
+            v_dest_idx := v_dest_idx + 1;
+            v_dest(v_dest_idx) := LF;
+            v_source_idx := v_source_idx + 2;
+          else
+            exit;
+          end if;
+        end loop;
+      else
+        return "";
+      end if;
+    end if;
+    return v_dest(1 to v_dest_idx);
   end;
 
   function remove_initial_chars(
@@ -945,10 +1042,56 @@ package body string_methods_pkg is
     width           : natural;
     justified       : side;
     format_spaces   : t_format_spaces;
-    truncate        : t_truncate_string := DISALLOW_TRUNCATE
+    truncate        : t_truncate_string := DISALLOW_TRUNCATE;
+    radix           : t_radix := DEC;
+    prefix          : t_radix_prefix := EXCL_RADIX;
+    format          : t_format_zeros := SKIP_LEADING_0 -- | KEEP_LEADING_0
     ) return string is
+    variable v_val_slv : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(val, 32));
+    variable v_line    : line;
+    variable v_result  : string(1 to 40);
+    variable v_width   : natural;
+    variable v_use_end_char : boolean := false;
   begin
-    return justify(to_string(val), justified, width, format_spaces, truncate);
+    if radix = DEC then
+      if prefix = INCL_RADIX then
+        write(v_line, string'("d"""));
+        v_use_end_char := true;
+      end if;
+      write(v_line, justify(to_string(val), justified, width, format_spaces, truncate));
+    elsif radix = BIN then
+      if prefix = INCL_RADIX then
+        write(v_line, string'("b"""));
+        v_use_end_char := true;
+      end if;
+      write(v_line, adjust_leading_0(justify(to_string(v_val_slv), justified, width, format_spaces, truncate), format));
+    else -- HEX
+      if prefix = INCL_RADIX then
+        write(v_line, string'("x"""));
+        v_use_end_char := true;
+      end if;
+      write(v_line, adjust_leading_0(justify(to_hstring(v_val_slv), justified, width, format_spaces, truncate), format));
+    end if;
+    if v_use_end_char then
+      write(v_line, string'(""""));
+    end if;
+
+    v_width := v_line'length;
+    v_result(1 to v_width) := v_line.all;
+    deallocate(v_line);
+    return v_result(1 to v_width);
+  end;
+
+  function to_string(
+    val             : integer;
+    radix           : t_radix;
+    prefix          : t_radix_prefix;
+    format          : t_format_zeros := SKIP_LEADING_0 -- | KEEP_LEADING_0
+    ) return string is
+    variable v_line : line;
+  begin
+    write(v_line, to_string(val));
+    return to_string(val, v_line'length, LEFT, SKIP_LEADING_SPACE, DISALLOW_TRUNCATE, radix, prefix, format);
   end;
 
   -- This function has been deprecated and will be removed in the next major release
@@ -1098,50 +1241,6 @@ package body string_methods_pkg is
   end;
 
   function to_string(
-    val     : t_byte_array;
-    radix   : t_radix        := HEX_BIN_IF_INVALID;
-    format  : t_format_zeros := KEEP_LEADING_0;  -- | SKIP_LEADING_0
-    prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
-    ) return string is
-    variable v_line         : line;
-    variable v_result       : string(1 to 2 +              -- parentheses
-                                     2*(val'length - 1) +  -- commas
-                                     26 * val'length);     -- 26 is max length of returned value from slv to_string()
-    variable v_width        : natural;
-  begin
-    if val'length = 0 then
-      -- Value length is zero,
-      -- return empty string.
-      return "";
-    elsif val'length = 1 then
-      -- Value length is 1
-      -- Return the single value it contains
-      return to_string(val(val'low), radix, format, prefix);
-    else
-      -- Value length more than 1
-      -- Comma-separate all array members and return
-      write(v_line, string'("("));
-
-      for i in val'range loop
-        write(v_line, to_string(val(i), radix, format, prefix));
-
-        if i < val'right and val'ascending then
-          write(v_line, string'(", "));
-        elsif i > val'right and not val'ascending then
-          write(v_line, string'(", "));
-        end if;
-      end loop;
-
-      write(v_line, string'(")"));
-
-      v_width := v_line'length;
-      v_result(1 to v_width) := v_line.all;
-      deallocate(v_line);
-      return v_result(1 to v_width);
-    end if;
-  end;
-
-  function to_string(
     val     : t_slv_array;
     radix   : t_radix        := HEX_BIN_IF_INVALID;
     format  : t_format_zeros := KEEP_LEADING_0;  -- | SKIP_LEADING_0
@@ -1157,7 +1256,7 @@ package body string_methods_pkg is
       return "";
     else
       -- Comma-separate all array members and return
-      write(v_line, string'("("));      
+      write(v_line, string'("("));
 
       for idx in val'range loop
         write(v_line, to_string(val(idx), radix, format, prefix));
@@ -1194,7 +1293,7 @@ package body string_methods_pkg is
       return "";
     else
       -- Comma-separate all array members and return
-      write(v_line, string'("("));      
+      write(v_line, string'("("));
 
       for idx in val'range loop
         write(v_line, to_string(val(idx), radix, format, prefix));
@@ -1204,7 +1303,7 @@ package body string_methods_pkg is
         elsif (idx > val'right) and not(val'ascending) then
           write(v_line, string'(", "));
         end if;
-        
+
       end loop;
       write(v_line, string'(")"));
 
@@ -1231,7 +1330,7 @@ package body string_methods_pkg is
       return "";
     else
       -- Comma-separate all array members and return
-      write(v_line, string'("("));      
+      write(v_line, string'("("));
 
       for idx in val'range loop
         write(v_line, to_string(val(idx), radix, format, prefix));
@@ -1241,7 +1340,7 @@ package body string_methods_pkg is
         elsif (idx > val'right) and not(val'ascending) then
           write(v_line, string'(", "));
         end if;
-        
+
       end loop;
       write(v_line, string'(")"));
 
@@ -1250,7 +1349,7 @@ package body string_methods_pkg is
       deallocate(v_line);
       return v_result(1 to v_width);
     end if;
-  end function;  
+  end function;
 
   --========================================================
   -- Handle types defined at lower levels
@@ -1280,17 +1379,20 @@ package body string_methods_pkg is
     val       : t_attention;
     width     : natural;
     justified : side    := right
-      ) return string is
-    begin
-      return to_upper(justify(t_attention'image(val), justified, width));
-    end;
+  ) return string is
+  begin
+    return to_upper(justify(t_attention'image(val), justified, width));
+  end;
 
-  -- function to_string(
-    -- dummy : t_void
-  -- ) return string is
-  -- begin
-    -- return "VOID";
-  -- end function;
+  function to_string(
+    val       : t_check_type;
+    width     : natural;
+    justified : side    := right
+  ) return string is
+    constant inner_string : string  := t_check_type'image(val);
+  begin
+    return to_upper(justify(inner_string, justified, width));
+  end function;
 
   procedure to_string(
     val   : t_alert_attention_counters;
@@ -1298,37 +1400,40 @@ package body string_methods_pkg is
     ) is
     variable v_line          : line;
     variable v_line_copy     : line;
-    variable v_status_failed : boolean := true;
-    variable v_mismatch      : boolean := false;
-    variable v_header        : string(1 to 42);
+    variable v_more_than_expected_alerts : boolean := false;
+    variable v_less_than_expected_alerts      : boolean := false;
     constant prefix          : string := C_LOG_PREFIX & "     ";
   begin
     if order = INTERMEDIATE then
-      v_header := "*** INTERMEDIATE SUMMARY OF ALL ALERTS ***";
+      write(v_line,
+          LF &
+          fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF &
+          "*** INTERMEDIATE SUMMARY OF ALL ALERTS ***" & LF &
+          fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF &
+          "                          REGARDED   EXPECTED  IGNORED      Comment?" & LF);
     else -- order=FINAL
-      v_header := "*** FINAL SUMMARY OF ALL ALERTS  ***      ";
+      write(v_line,
+          LF &
+          fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF &
+          "*** FINAL SUMMARY OF ALL ALERTS ***" & LF &
+          fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF &
+          "                          REGARDED   EXPECTED  IGNORED      Comment?" & LF);
     end if;
 
-    write(v_line,
-        LF &
-        fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF &
-        v_header & LF &
-        fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF &
-        "                          REGARDED   EXPECTED  IGNORED      Comment?" & LF);
     for i in NOTE to t_alert_level'right loop
       write(v_line, "          " & to_upper(to_string(i, 13, LEFT)) & ": ");  -- Severity
       for j in t_attention'left to t_attention'right loop
         write(v_line, to_string(integer'(val(i)(j)), 6, RIGHT, KEEP_LEADING_SPACE) & "    ");
       end loop;
       if (val(i)(REGARD) = val(i)(EXPECT)) then
-        write(v_line, "     ok      " & LF);
+        write(v_line, "     ok" & LF);
       else
-        write(v_line, "     *** " & to_string(i,0) & " *** " & LF);
+        write(v_line, "     *** " & to_string(i,0) & " ***" & LF);
         if (i > MANUAL_CHECK) then
           if (val(i)(REGARD) < val(i)(EXPECT)) then
-            v_mismatch := true;
+            v_less_than_expected_alerts := true;
           else
-            v_status_failed  := false;
+            v_more_than_expected_alerts  := true;
           end if;
         end if;
       end if;
@@ -1337,9 +1442,9 @@ package body string_methods_pkg is
     -- Print a conclusion when called from the FINAL part of the test sequencer
     -- but not when called from in the middle of the test sequence (order=INTERMEDIATE)
     if order = FINAL then
-      if not v_status_failed then
+      if v_more_than_expected_alerts then
         write(v_line, ">> Simulation FAILED, with unexpected serious alert(s)" & LF);
-      elsif v_mismatch then
+      elsif v_less_than_expected_alerts then
         write(v_line, ">> Simulation FAILED: Mismatch between counted and expected serious alerts" & LF);
       else
         write(v_line, ">> Simulation SUCCESS: No mismatch between counted and expected serious alerts" & LF);
@@ -1351,10 +1456,52 @@ package body string_methods_pkg is
     prefix_lines(v_line, prefix);
 
     -- Write the info string to the target file
-    write (v_line_copy, v_line.all & lf);  -- copy line
+    write (v_line_copy, v_line.all);  -- copy line
     writeline(OUTPUT, v_line);
     writeline(LOG_FILE, v_line_copy);
   end;
+
+  procedure to_string(
+    val   : t_check_counters_array;
+    order : t_order := FINAL
+    ) is
+      variable v_line                       : line;
+      variable v_line_copy                  : line;
+      variable v_more_than_expected_alerts  : boolean := false;
+      variable v_less_than_expected_alerts  : boolean := false;
+      constant prefix                       : string := C_LOG_PREFIX & "     ";
+    begin
+      if order = INTERMEDIATE then
+        write(v_line,
+            LF &
+            fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF &
+            "*** INTERMEDIATE SUMMARY OF ALL CHECK COUNTERS ***" & LF &
+            fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF);
+      else -- order=FINAL
+        write(v_line,
+            LF &
+            fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF &
+            "*** FINAL SUMMARY OF ALL CHECK COUNTERS ***" & LF &
+            fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF);
+      end if;
+
+      for i in CHECK_VALUE to t_check_type'right loop
+        write(v_line, "          " & to_upper(to_string(i, 22, LEFT)) & ": ");
+        write(v_line, to_string(integer'(val(i)), 10, RIGHT, KEEP_LEADING_SPACE) & "    ");
+        write(v_line, "" & LF);
+      end loop;
+
+      write(v_line, fill_string('=', (C_LOG_LINE_WIDTH - prefix'length)) & LF & LF);
+  
+      wrap_lines(v_line, 1, 1, C_LOG_LINE_WIDTH-prefix'length);
+      prefix_lines(v_line, prefix);
+  
+      -- Write the info string to the target file
+      write (v_line_copy, v_line.all);  -- copy line
+      writeline(OUTPUT, v_line);
+      writeline(LOG_FILE, v_line_copy);
+    end;
+
 
   -- Convert from ASCII to character
   -- Inputs:

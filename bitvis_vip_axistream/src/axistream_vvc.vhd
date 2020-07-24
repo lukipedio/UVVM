@@ -1,13 +1,14 @@
---========================================================================================================================
--- Copyright (c) 2017 by Bitvis AS.  All rights reserved.
--- You should have received a copy of the license file containing the MIT License (see LICENSE.TXT), if not,
--- contact Bitvis AS <support@bitvis.no>.
+--================================================================================================================================
+-- Copyright 2020 Bitvis
+-- Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 and in the provided LICENSE.TXT.
 --
--- UVVM AND ANY PART THEREOF ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
--- WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
--- OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
--- OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH UVVM OR THE USE OR OTHER DEALINGS IN UVVM.
---========================================================================================================================
+-- Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+-- an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and limitations under the License.
+--================================================================================================================================
+-- Note : Any functionality not explicitly described in the documentation is subject to change at any time
+----------------------------------------------------------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------------------
 -- Description   : See library quick reference (under 'doc') and README-file(s)
@@ -30,6 +31,7 @@ use work.td_target_support_pkg.all;
 use work.td_vvc_entity_support_pkg.all;
 use work.td_cmd_queue_pkg.all;
 use work.td_result_queue_pkg.all;
+use work.transaction_pkg.all;
 
 --========================================================================================================================
 entity axistream_vvc is
@@ -65,21 +67,41 @@ end entity axistream_vvc;
 --========================================================================================================================
 architecture behave of axistream_vvc is
 
-   constant C_SCOPE      : string       := C_VVC_NAME & "," & to_string(GC_INSTANCE_IDX);
-   constant C_VVC_LABELS : t_vvc_labels := assign_vvc_labels(C_SCOPE, C_VVC_NAME, GC_INSTANCE_IDX, NA);
+  constant C_SCOPE      : string       := C_VVC_NAME & "," & to_string(GC_INSTANCE_IDX);
+  constant C_VVC_LABELS : t_vvc_labels := assign_vvc_labels(C_SCOPE, C_VVC_NAME, GC_INSTANCE_IDX, NA);
 
-   signal executor_is_busy      : boolean := false;
-   signal queue_is_increasing   : boolean := false;
-   signal last_cmd_idx_executed : natural := 0;
-   signal terminate_current_cmd : t_flag_record;
+  signal executor_is_busy      : boolean := false;
+  signal queue_is_increasing   : boolean := false;
+  signal last_cmd_idx_executed : natural := 0;
+  signal terminate_current_cmd : t_flag_record;
 
-   -- Instantiation of the element dedicated Queue
-   shared variable command_queue : work.td_cmd_queue_pkg.t_generic_queue;
-   shared variable result_queue  : work.td_result_queue_pkg.t_generic_queue;
+  -- Instantiation of the element dedicated Queue
+  shared variable command_queue : work.td_cmd_queue_pkg.t_generic_queue;
+  shared variable result_queue  : work.td_result_queue_pkg.t_generic_queue;
 
-   alias vvc_config       : t_vvc_config       is shared_axistream_vvc_config(GC_INSTANCE_IDX);
-   alias vvc_status       : t_vvc_status       is shared_axistream_vvc_status(GC_INSTANCE_IDX);
-   alias transaction_info : t_transaction_info is shared_axistream_transaction_info(GC_INSTANCE_IDX);
+  alias vvc_config       : t_vvc_config       is shared_axistream_vvc_config(GC_INSTANCE_IDX);
+  alias vvc_status       : t_vvc_status       is shared_axistream_vvc_status(GC_INSTANCE_IDX);
+  alias transaction_info : t_transaction_info is shared_axistream_transaction_info(GC_INSTANCE_IDX);
+    -- Transaction info
+  alias vvc_transaction_info_trigger   : std_logic           is global_axistream_vvc_transaction_trigger(GC_INSTANCE_IDX);
+  alias vvc_transaction_info      : t_transaction_group is shared_axistream_vvc_transaction_info(GC_INSTANCE_IDX);
+  -- VVC Activity 
+  signal entry_num_in_vvc_activity_register : integer;
+
+  --UVVM: temporary fix for HVVC, remove function below in v3.0
+  function get_msg_id_panel(
+    constant command    : in t_vvc_cmd_record;
+    constant vvc_config : in t_vvc_config
+  ) return t_msg_id_panel is
+  begin
+    -- If the parent_msg_id_panel is set then use it,
+    -- otherwise use the VVCs msg_id_panel from its config.
+    if command.msg(1 to 5) = "HVVC:" then
+      return vvc_config.parent_msg_id_panel;
+    else
+      return vvc_config.msg_id_panel;
+    end if;
+  end function;
 
 begin
 
@@ -100,24 +122,34 @@ begin
 --========================================================================================================================
    cmd_interpreter : process
      variable v_cmd_has_been_acked : boolean; -- Indicates if acknowledge_cmd() has been called for the current shared_vvc_cmd
-     variable v_local_vvc_cmd        : t_vvc_cmd_record := C_VVC_CMD_DEFAULT;
+     variable v_local_vvc_cmd      : t_vvc_cmd_record := C_VVC_CMD_DEFAULT;
+     variable v_msg_id_panel       : t_msg_id_panel;
+     variable v_temp_msg_id_panel  : t_msg_id_panel; --UVVM: temporary fix for HVVC, remove in v3.0
    begin
 
       -- 0. Initialize the process prior to first command
       work.td_vvc_entity_support_pkg.initialize_interpreter(terminate_current_cmd, global_awaiting_completion);
       -- initialise shared_vvc_last_received_cmd_idx for channel and instance
       shared_vvc_last_received_cmd_idx(NA, GC_INSTANCE_IDX) := 0;
+      -- Register VVC in vvc activity register
+      entry_num_in_vvc_activity_register <= shared_vvc_activity_register.priv_register_vvc(name      => C_VVC_NAME,
+                                                                                           instance  => GC_INSTANCE_IDX);
+      -- Set initial value of v_msg_id_panel to msg_id_panel in config
+      v_msg_id_panel := vvc_config.msg_id_panel;
 
       -- Then for every single command from the sequencer
       loop  -- basically as long as new commands are received
 
          -- 1. wait until command targeted at this VVC. Must match VVC name, instance and channel (if applicable)
-      --    releases global semaphore
+         --    releases global semaphore
          -------------------------------------------------------------------------
-         work.td_vvc_entity_support_pkg.await_cmd_from_sequencer(C_VVC_LABELS, vvc_config, THIS_VVCT, VVC_BROADCAST, global_vvc_busy, global_vvc_ack, shared_vvc_cmd, v_local_vvc_cmd);
+         work.td_vvc_entity_support_pkg.await_cmd_from_sequencer(C_VVC_LABELS, vvc_config, THIS_VVCT, VVC_BROADCAST, global_vvc_busy, global_vvc_ack, v_local_vvc_cmd);
          v_cmd_has_been_acked := false; -- Clear flag
          -- update shared_vvc_last_received_cmd_idx with received command index
          shared_vvc_last_received_cmd_idx(NA, GC_INSTANCE_IDX) := v_local_vvc_cmd.cmd_idx;
+         -- Select between a provided msg_id_panel via the vvc_cmd_record from a VVC with a higher hierarchy or the
+         -- msg_id_panel in this VVC's config. This is to correctly handle the logging when using Hierarchical-VVCs.
+         v_msg_id_panel := get_msg_id_panel(v_local_vvc_cmd, vvc_config);
 
          -- 2a. Put command on the queue if intended for the executor
          -------------------------------------------------------------------------
@@ -127,6 +159,13 @@ begin
             -- 2b. Otherwise command is intended for immediate response
             -------------------------------------------------------------------------
          elsif v_local_vvc_cmd.command_type = IMMEDIATE then
+
+            --UVVM: temporary fix for HVVC, remove two lines below in v3.0
+            if v_local_vvc_cmd.operation /= DISABLE_LOG_MSG and v_local_vvc_cmd.operation /= ENABLE_LOG_MSG then
+              v_temp_msg_id_panel     := vvc_config.msg_id_panel;
+              vvc_config.msg_id_panel := v_msg_id_panel;
+            end if;
+
             case v_local_vvc_cmd.operation is
 
                when AWAIT_COMPLETION =>
@@ -160,6 +199,11 @@ begin
 
             end case;
 
+            --UVVM: temporary fix for HVVC, remove line below in v3.0
+            if v_local_vvc_cmd.operation /= DISABLE_LOG_MSG and v_local_vvc_cmd.operation /= ENABLE_LOG_MSG then
+              vvc_config.msg_id_panel := v_temp_msg_id_panel;
+            end if;
+
          else
             tb_error("command_type is not IMMEDIATE or QUEUED", C_SCOPE);
          end if;
@@ -187,24 +231,36 @@ begin
       variable v_timestamp_end_of_last_bfm_access       : time := 0 ns;
       variable v_command_is_bfm_access                  : boolean := false;
       variable v_prev_command_was_bfm_access            : boolean := false;
-      variable v_receive_as_slv                         : t_slv_array(0 to 0 )( (v_result.data_array'length*8)-1 downto 0);
-      variable v_byte_endianness                        : t_byte_endianness := vvc_config.bfm_config.byte_endianness;
+      variable v_msg_id_panel                           : t_msg_id_panel;
 
    begin
 
       -- 0. Initialize the process prior to first command
       -------------------------------------------------------------------------
       work.td_vvc_entity_support_pkg.initialize_executor(terminate_current_cmd);
-      loop
+      -- Set initial value of v_msg_id_panel to msg_id_panel in config
+      v_msg_id_panel := vvc_config.msg_id_panel;
 
+      loop
+         
+         -- update vvc activity
+         update_vvc_activity_register(global_trigger_vvc_activity_register, vvc_status, INACTIVE, entry_num_in_vvc_activity_register, last_cmd_idx_executed, command_queue.is_empty(VOID), C_SCOPE);
+         
          -- 1. Set defaults, fetch command and log
          -------------------------------------------------------------------------
          work.td_vvc_entity_support_pkg.fetch_command_and_prepare_executor(v_cmd, command_queue, vvc_config, vvc_status, queue_is_increasing, executor_is_busy, C_VVC_LABELS);
+
+         -- update vvc activity
+         update_vvc_activity_register(global_trigger_vvc_activity_register, vvc_status, ACTIVE, entry_num_in_vvc_activity_register, last_cmd_idx_executed, command_queue.is_empty(VOID), C_SCOPE);
 
          -- Reset the transaction info for waveview
          --transaction_info := C_TRANSACTION_INFO_DEFAULT;
          transaction_info.operation := v_cmd.operation;
          transaction_info.msg       := pad_string(to_string(v_cmd.msg), ' ', transaction_info.msg'length);
+
+         -- Select between a provided msg_id_panel via the vvc_cmd_record from a VVC with a higher hierarchy or the
+         -- msg_id_panel in this VVC's config. This is to correctly handle the logging when using Hierarchical-VVCs.
+         v_msg_id_panel := get_msg_id_panel(v_cmd, vvc_config);
 
          -- Check if command is a BFM access
          v_prev_command_was_bfm_access := v_command_is_bfm_access; -- save for inter_bfm_delay
@@ -218,7 +274,9 @@ begin
          work.td_vvc_entity_support_pkg.insert_inter_bfm_delay_if_requested(vvc_config                         => vvc_config,
                                                                             command_is_bfm_access              => v_prev_command_was_bfm_access,
                                                                             timestamp_start_of_last_bfm_access => v_timestamp_start_of_last_bfm_access,
-                                                                            timestamp_end_of_last_bfm_access   => v_timestamp_end_of_last_bfm_access);
+                                                                            timestamp_end_of_last_bfm_access   => v_timestamp_end_of_last_bfm_access,
+                                                                            msg_id_panel                       => v_msg_id_panel,
+                                                                            scope                              => C_SCOPE);
 
          if v_command_is_bfm_access then
             v_timestamp_start_of_current_bfm_access := now;
@@ -232,96 +290,98 @@ begin
             --===================================
 
             when TRANSMIT =>
-               check_value(GC_VVC_IS_MASTER, true, TB_ERROR, "Sanity check: Method call only makes sense for master (source) VVC", C_SCOPE, ID_NEVER);
-               -- Put in queue so that the monitor VVC knows what to expect
-               -- Needed when the sink is in Monitor Mode, as an alternative to calling lbusExpect() for each packet
-               transaction_info.numPacketsSent := transaction_info.numPacketsSent + 1;
+                if GC_VVC_IS_MASTER then
+                  -- Set vvc transaction info
+                  set_global_vvc_transaction_info(vvc_transaction_info_trigger, vvc_transaction_info, v_cmd, vvc_config);
 
-               -- Call the corresponding procedure in the BFM package.
-               axistream_transmit_bytes(
-                  data_array           => v_cmd.data_array(0 to v_cmd.data_array_length-1),
-                  user_array           => v_cmd.user_array(0 to v_cmd.user_array_length-1),
-                  strb_array           => v_cmd.strb_array(0 to v_cmd.strb_array_length-1),
-                  id_array             => v_cmd.id_array(0 to v_cmd.id_array_length-1),
-                  dest_array           => v_cmd.dest_array(0 to v_cmd.dest_array_length-1),
-                  msg                  => format_msg(v_cmd),
-                  clk                  => clk,
-                  -- Using the non-record version to avoid fatal error in Modelsim: (SIGSEGV) Bad handle or reference
-                  axistream_if_tdata  => axistream_vvc_if.tdata,
-                  axistream_if_tkeep  => axistream_vvc_if.tkeep,
-                  axistream_if_tuser  => axistream_vvc_if.tuser,
-                  axistream_if_tstrb  => axistream_vvc_if.tstrb,
-                  axistream_if_tid    => axistream_vvc_if.tid,
-                  axistream_if_tdest  => axistream_vvc_if.tdest,
-                  axistream_if_tvalid => axistream_vvc_if.tvalid,
-                  axistream_if_tlast  => axistream_vvc_if.tlast,
-                  axistream_if_tready => axistream_vvc_if.tready,
-                  scope               => C_SCOPE,
-                  msg_id_panel        => vvc_config.msg_id_panel,
-                  config              => vvc_config.bfm_config);
+                  -- Put in queue so that the monitor VVC knows what to expect
+                  -- Needed when the sink is in Monitor Mode, as an alternative to calling lbusExpect() for each packet
+                  transaction_info.numPacketsSent := transaction_info.numPacketsSent + 1;
+
+                  -- Call the corresponding procedure in the BFM package.
+                  axistream_transmit_bytes(
+                     data_array           => v_cmd.data_array(0 to v_cmd.data_array_length-1),
+                     user_array           => v_cmd.user_array(0 to v_cmd.user_array_length-1),
+                     strb_array           => v_cmd.strb_array(0 to v_cmd.strb_array_length-1),
+                     id_array             => v_cmd.id_array(0 to v_cmd.id_array_length-1),
+                     dest_array           => v_cmd.dest_array(0 to v_cmd.dest_array_length-1),
+                     msg                  => format_msg(v_cmd),
+                     clk                  => clk,
+                     axistream_if         => axistream_vvc_if,
+                     scope                => C_SCOPE,
+                     msg_id_panel         => v_msg_id_panel,
+                     config               => vvc_config.bfm_config);
+               else
+                  alert(TB_ERROR, "Sanity check: Method call only makes sense for master (source) VVC", C_SCOPE);
+               end if;
 
             when RECEIVE =>
-               axistream_receive(data_array          => v_receive_as_slv, --v_result.data_array,
-                                 data_length         => v_result.data_length,
-                                 user_array          => v_result.user_array,
-                                 strb_array          => v_result.strb_array,
-                                 id_array            => v_result.id_array,
-                                 dest_array          => v_result.dest_array,
-                                 msg                 => format_msg(v_cmd),
-                                 clk                 => clk,
-                                 -- Using the non-record version to avoid fatal error in Questa: (SIGSEGV) Bad handle or reference
-                                 axistream_if_tdata  => axistream_vvc_if.tdata,
-                                 axistream_if_tkeep  => axistream_vvc_if.tkeep,
-                                 axistream_if_tuser  => axistream_vvc_if.tuser,
-                                 axistream_if_tstrb  => axistream_vvc_if.tstrb,
-                                 axistream_if_tid    => axistream_vvc_if.tid,
-                                 axistream_if_tdest  => axistream_vvc_if.tdest,
-                                 axistream_if_tvalid => axistream_vvc_if.tvalid,
-                                 axistream_if_tlast  => axistream_vvc_if.tlast,
-                                 axistream_if_tready => axistream_vvc_if.tready,
-                                 scope               => C_SCOPE,
-                                 msg_id_panel        => vvc_config.msg_id_panel,
-                                 config              => vvc_config.bfm_config);
-               -- Store the result
-               v_result.data_array := convert_slv_array_to_byte_array(v_receive_as_slv, true, v_byte_endianness);
-               work.td_vvc_entity_support_pkg.store_result( result_queue => result_queue,
-                                                            cmd_idx      => v_cmd.cmd_idx,
-                                                            result       => v_result );
+               if not GC_VVC_IS_MASTER then
+                  -- Set vvc transaction info
+                  set_global_vvc_transaction_info(vvc_transaction_info_trigger, vvc_transaction_info, v_cmd, vvc_config);
+
+                  axistream_receive(data_array          => v_result.data_array,
+                                    data_length         => v_result.data_length,
+                                    user_array          => v_result.user_array,
+                                    strb_array          => v_result.strb_array,
+                                    id_array            => v_result.id_array,
+                                    dest_array          => v_result.dest_array,
+                                    msg                 => format_msg(v_cmd),
+                                    clk                 => clk,
+                                    axistream_if        => axistream_vvc_if,
+                                    scope               => C_SCOPE,
+                                    msg_id_panel        => v_msg_id_panel,
+                                    config              => vvc_config.bfm_config);
+
+                  -- Request SB check result
+                  if v_cmd.data_routing = TO_SB then
+                    -- call SB check_received
+                    alert(tb_warning, "Scoreboard type for AXIStream RECEIVE data not implemented");
+                  else                            
+                     -- Store the result
+                     work.td_vvc_entity_support_pkg.store_result( result_queue => result_queue,
+                                                                  cmd_idx      => v_cmd.cmd_idx,
+                                                                  result       => v_result );
+                  end if;
+               else
+                  alert(TB_ERROR, "Sanity check: Method call only makes sense for slave (sink) VVC", C_SCOPE);
+               end if;
+
 
             when EXPECT =>
-               -- Call the corresponding procedure in the BFM package.
-               axistream_expect_bytes(
-                  exp_data_array      => v_cmd.data_array(0 to v_cmd.data_array_length-1),
-                  exp_user_array      => v_cmd.user_array(0 to v_cmd.user_array_length-1),
-                  exp_strb_array      => v_cmd.strb_array(0 to v_cmd.strb_array_length-1),
-                  exp_id_array        => v_cmd.id_array(0 to v_cmd.id_array_length-1),
-                  exp_dest_array      => v_cmd.dest_array(0 to v_cmd.dest_array_length-1),
-                  msg                 => format_msg(v_cmd),
-                  clk                 => clk,
-                  -- Using the non-record version to avoid fatal error in Questa: (SIGSEGV) Bad handle or reference
-                  axistream_if_tdata  => axistream_vvc_if.tdata,
-                  axistream_if_tkeep  => axistream_vvc_if.tkeep,
-                  axistream_if_tuser  => axistream_vvc_if.tuser,
-                  axistream_if_tstrb  => axistream_vvc_if.tstrb,
-                  axistream_if_tid    => axistream_vvc_if.tid,
-                  axistream_if_tdest  => axistream_vvc_if.tdest,
-                  axistream_if_tvalid => axistream_vvc_if.tvalid,
-                  axistream_if_tlast  => axistream_vvc_if.tlast,
-                  axistream_if_tready => axistream_vvc_if.tready,
-                  alert_level         => v_cmd.alert_level,
-                  scope               => C_SCOPE,
-                  msg_id_panel        => vvc_config.msg_id_panel,
-                  config              => vvc_config.bfm_config);
+               if not GC_VVC_IS_MASTER then
+                  -- Set vvc transaction info
+                  set_global_vvc_transaction_info(vvc_transaction_info_trigger, vvc_transaction_info, v_cmd, vvc_config);
+
+                  -- Call the corresponding procedure in the BFM package.
+                  axistream_expect_bytes(
+                     exp_data_array      => v_cmd.data_array(0 to v_cmd.data_array_length-1),
+                     exp_user_array      => v_cmd.user_array(0 to v_cmd.user_array_length-1),
+                     exp_strb_array      => v_cmd.strb_array(0 to v_cmd.strb_array_length-1),
+                     exp_id_array        => v_cmd.id_array(0 to v_cmd.id_array_length-1),
+                     exp_dest_array      => v_cmd.dest_array(0 to v_cmd.dest_array_length-1),
+                     msg                 => format_msg(v_cmd),
+                     clk                 => clk,
+                     axistream_if        => axistream_vvc_if,
+                     alert_level         => v_cmd.alert_level,
+                     scope               => C_SCOPE,
+                     msg_id_panel        => v_msg_id_panel,
+                     config              => vvc_config.bfm_config);
+               else
+                  alert(TB_ERROR, "Sanity check: Method call only makes sense for slave (sink) VVC", C_SCOPE);
+               end if;
 
              -- UVVM common operations
              --===================================
             when INSERT_DELAY =>
-              log(ID_INSERTED_DELAY, "Running: " & to_string(v_cmd.proc_call) & " " & format_command_idx(v_cmd), C_SCOPE, vvc_config.msg_id_panel);
+              log(ID_INSERTED_DELAY, "Running: " & to_string(v_cmd.proc_call) & " " & format_command_idx(v_cmd), C_SCOPE, v_msg_id_panel);
               if v_cmd.gen_integer_array(0) = -1 then
                 -- Delay specified using time
                 wait until terminate_current_cmd.is_active = '1' for v_cmd.delay;
               else
                 -- Delay specified using integer
+                check_value(vvc_config.bfm_config.clock_period > -1 ns, TB_ERROR, "Check that clock_period is configured when using insert_delay().",
+                        C_SCOPE, ID_NEVER, v_msg_id_panel);
                 wait until terminate_current_cmd.is_active = '1' for v_cmd.gen_integer_array(0) * vvc_config.bfm_config.clock_period;
               end if;
 
@@ -341,13 +401,16 @@ begin
 
          -- Reset terminate flag if any occurred
          if (terminate_current_cmd.is_active = '1') then
-            log(ID_CMD_EXECUTOR, "Termination request received", C_SCOPE, vvc_config.msg_id_panel);
+            log(ID_CMD_EXECUTOR, "Termination request received", C_SCOPE, v_msg_id_panel);
             uvvm_vvc_framework.ti_vvc_framework_support_pkg.reset_flag(terminate_current_cmd);
          end if;
 
          last_cmd_idx_executed <= v_cmd.cmd_idx;
          -- Reset the transaction info for waveview
          transaction_info   := C_TRANSACTION_INFO_DEFAULT;
+
+        -- Set vvc transaction info back to default values
+        reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
 
       end loop;
    end process;

@@ -1,13 +1,14 @@
---========================================================================================================================
--- Copyright (c) 2017 by Bitvis AS.  All rights reserved.
--- You should have received a copy of the license file containing the MIT License (see LICENSE.TXT), if not,
--- contact Bitvis AS <support@bitvis.no>.
+--================================================================================================================================
+-- Copyright 2020 Bitvis
+-- Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 and in the provided LICENSE.TXT.
 --
--- UVVM AND ANY PART THEREOF ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
--- WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
--- OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
--- OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH UVVM OR THE USE OR OTHER DEALINGS IN UVVM.
---========================================================================================================================
+-- Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+-- an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and limitations under the License.
+--================================================================================================================================
+-- Note : Any functionality not explicitly described in the documentation is subject to change at any time
+----------------------------------------------------------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------------------
 -- Description   : This is NOT an example of how to implement a UART core. This is just
@@ -217,7 +218,8 @@ begin
   -- Receive process
   ---------------------------------------------------------------------------
   uart_rx : process (clk, arst) is
-    variable vr_rx_data_idx : unsigned(2 downto 0) := (others => '0');
+    variable vr_rx_data_idx   : unsigned(2 downto 0) := (others => '0');
+    variable v_error_detected : boolean := false;
   begin  -- process uart_tx
     if arst = '1' then                  -- asynchronous reset (active high)
       rx_active         <= '0';
@@ -233,6 +235,7 @@ begin
       transient_err     <= '0';
       vr_rx_data_idx    := (others => '0');
       rx_data_full      <= '1';
+      v_error_detected  := false;
     elsif rising_edge(clk) then         -- rising clock edge
 
       -- Perform read.
@@ -252,21 +255,22 @@ begin
 
       -- always shift in new synchronized serial data
       rx_bit_samples <= rx_bit_samples(GC_CLOCKS_PER_BIT-2 downto 0) & rx_s(1);
-
+    
       -- look for enough GC_START_BITs in rx_bit_samples vector
       if rx_active = '0' and
-        (find_num_hits(rx_bit_samples, GC_START_BIT) >= GC_CLOCKS_PER_BIT-1) then
-        rx_active      <= '1';
-        rx_just_active <= true;
+         (find_num_hits(rx_bit_samples, GC_START_BIT) >= GC_CLOCKS_PER_BIT-1) then
+          rx_active      <= '1';
+          rx_just_active <= true;
       end if;
 
       if rx_active = '0' then
         -- defaults
-        stop_err       <= '0';
-        parity_err     <= '0';
-        transient_err  <= '0';
-        rx_clk_counter <= (others => '0');
-        rx_bit_counter <= (others => '0');
+        stop_err          <= '0';
+        parity_err        <= '0';
+        transient_err     <= '0';
+        rx_clk_counter    <= (others => '0');
+        rx_bit_counter    <= (others => '0');
+        v_error_detected  := false;
       else
         -- We could check when we first enter whether we find the full number
         -- of start samples and adjust the time we start rx_clk_counter by a
@@ -287,11 +291,12 @@ begin
         end if;
 
         -- shift in data, check for consistency and forward
-        if rx_clk_counter >= GC_CLOCKS_PER_BIT - 1 then
+        if rx_clk_counter >= GC_CLOCKS_PER_BIT - 1 then         
           rx_bit_counter <= rx_bit_counter + 1;
 
           if transient_error(rx_bit_samples, GC_MIN_EQUAL_SAMPLES_PER_BIT) then
-            transient_err <= '1';
+            transient_err     <= '1';
+            v_error_detected  := true;
           end if;
 
           -- are we done? not counting the start bit
@@ -306,23 +311,34 @@ begin
             when 8 =>
               -- check parity
               if (odd_parity(rx_buffer) /= find_most_repeated_bit(rx_bit_samples)) then
-                parity_err <= '1';
+                parity_err        <= '1';
+                v_error_detected  := true;
               end if;
             when 9 =>
-              -- check stop bit, and end byte receive
-              if find_most_repeated_bit(rx_bit_samples) /= GC_STOP_BIT then
-                stop_err <= '1';
-              end if;
-              rx_data(to_integer(vr_rx_data_idx)) <= rx_buffer;
               rx_data_valid <= '1';     -- ready for higher level protocol
 
-              if vr_rx_data_idx < 3 then
-                vr_rx_data_idx := vr_rx_data_idx + 1;
-              else
-                rx_data_full <= '1';
+              -- check stop bit, and end byte receive
+              if find_most_repeated_bit(rx_bit_samples) /= GC_STOP_BIT then
+                stop_err          <= '1';
+                v_error_detected  := true;
               end if;
+
+              -- Data not valid on error
+              if v_error_detected then
+                rx_data_valid <= '0';
+              else
+                rx_data(to_integer(vr_rx_data_idx)) <= rx_buffer;
+
+                if vr_rx_data_idx < 3 then
+                  vr_rx_data_idx := vr_rx_data_idx + 1;
+                else
+                  rx_data_full <= '1';
+                end if;
+              end if;
+
             when others =>
               rx_active <= '0';
+              rx_bit_samples <= (others => '1');
 
           end case;
         end if;

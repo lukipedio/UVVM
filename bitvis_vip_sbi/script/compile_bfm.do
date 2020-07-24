@@ -1,17 +1,21 @@
-#========================================================================================================================
-# Copyright (c) 2017 by Bitvis AS.  All rights reserved.
-# You should have received a copy of the license file containing the MIT License (see LICENSE.TXT), if not, 
-# contact Bitvis AS <support@bitvis.no>.
+#================================================================================================================================
+# Copyright 2020 Bitvis
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 and in the provided LICENSE.TXT.
 #
-# UVVM AND ANY PART THEREOF ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH UVVM OR THE USE OR
-# OTHER DEALINGS IN UVVM.
-#========================================================================================================================
+# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+# an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and limitations under the License.
+#================================================================================================================================
+# Note : Any functionality not explicitly described in the documentation is subject to change at any time
+#--------------------------------------------------------------------------------------------------------------------------------
 
-# This file may be called with an argument
-# arg 1: Part directory of this library/module
+#-----------------------------------------------------------------------
+# This file must be called with 2 arguments:
+#
+#   arg 1: Source directory of this library/module
+#   arg 2: Target directory
+#-----------------------------------------------------------------------
 
 # Overload quietly (Modelsim specific command) to let it work in Riviera-Pro
 proc quietly { args } {
@@ -23,16 +27,15 @@ proc quietly { args } {
   }
 }
 
+# End the simulations if there's an error or when run from terminal.
 if {[batch_mode]} {
   onerror {abort all; exit -f -code 1}
 } else {
   onerror {abort all}
 }
-#Just in case...
-quietly quit -sim   
 
 # Detect simulator
-if {[catch {eval "vsim -version"} message] == 0} { 
+if {[catch {eval "vsim -version"} message] == 0} {
   quietly set simulator_version [eval "vsim -version"]
   # puts "Version is: $simulator_version"
   if {[regexp -nocase {modelsim} $simulator_version]} {
@@ -40,54 +43,80 @@ if {[catch {eval "vsim -version"} message] == 0} {
   } elseif {[regexp -nocase {aldec} $simulator_version]} {
     quietly set simulator "rivierapro"
   } else {
-    puts "Unknown simulator. Attempting use use Modelsim commands."
+    puts "Unknown simulator. Attempting to use Modelsim commands."
     quietly set simulator "modelsim"
-  }  
-} else { 
+  }
+} else {
     puts "vsim -version failed with the following message:\n $message"
     abort all
 }
 
-if { [string equal -nocase $simulator "modelsim"] } {
-  ###########
-  # Fix possible vmap bug
-  do fix_vmap.tcl 
-  ##########
-}
-
-# Set up vip_sbi_part_path and lib_name
-#------------------------------------------------------
-quietly set lib_name "bitvis_vip_sbi"
-quietly set part_name "bitvis_vip_sbi"
-# path from mpf-file in sim
-quietly set vip_sbi_part_path "../..//$part_name"
-
+#-----------------------------------------------------------------------
+# Set up source_path and target_path
+#-----------------------------------------------------------------------
 if { [info exists 1] } {
-  # path from this part to target part
-  quietly set vip_sbi_part_path "$1/..//$part_name"
+  quietly set source_path "$1"
+
+  if {$argc == 1} {
+    echo "\nUser specified source directory"
+    quietly set target_path "$source_path/sim"
+  } elseif {$argc >= 2} {
+    echo "\nUser specified source and target directory"
+    quietly set target_path "$2"
+  }
   unset 1
+} else {
+  echo "\nDefault output directory"
+  quietly set source_path ".."
+  quietly set target_path "$source_path/sim"
 }
 
+#------------------------------------------------------
+# Set lib_name
+#------------------------------------------------------
+quietly set lib_name bitvis_vip_sbi
 
 
+#------------------------------------------------------
 # (Re-)Generate library and Compile source files
-#--------------------------------------------------
-echo "\n\nRe-gen lib and compile $lib_name source\n"
-if {[file exists $vip_sbi_part_path/sim/$lib_name]} {
-  file delete -force $vip_sbi_part_path/sim/$lib_name
+#------------------------------------------------------
+echo "\n\n=== Re-gen lib and compile $lib_name BFM source\n"
+echo "Source path: $source_path"
+echo "Target path: $target_path"
+
+if {[file exists $target_path/$lib_name]} {
+  file delete -force $target_path/$lib_name
 }
-echo "\n\n****\n"
-if {![file exists $vip_sbi_part_path/sim]} {
-  file mkdir $vip_sbi_part_path/sim
+if {![file exists $target_path]} {
+  file mkdir $target_path/$lib_name
 }
 
-vlib $vip_sbi_part_path/sim/$lib_name
-vmap $lib_name $vip_sbi_part_path/sim/$lib_name
+quietly vlib $target_path/$lib_name
+quietly vmap $lib_name $target_path/$lib_name
 
+# Check if the UVVM Util library is in the specified target path, if not, 
+# then look in the default UVVM structure.
+if {$lib_name != "uvvm_util" && $lib_name != "bitvis_irqc" && $lib_name != "bitvis_uart"} {
+  echo "Mapping uvvm_util"
+  if {[file exists $target_path/uvvm_util]} {
+    quietly vmap uvvm_util $target_path/uvvm_util
+  } else {
+    quietly vmap uvvm_util $source_path/../uvvm_util/sim/uvvm_util
+  }
+}
+
+#------------------------------------------------------
+# Setup compile directives
+#------------------------------------------------------
 if { [string equal -nocase $simulator "modelsim"] } {
-  set compdirectives "-2008 -work $lib_name"
+  quietly set compdirectives "-quiet -suppress 1346,1236,1090 -2008 -work $lib_name"
 } elseif { [string equal -nocase $simulator "rivierapro"] } {
-  set compdirectives "-2008 -dbg -work $lib_name"
+  set compdirectives "-2008 -nowarn COMP96_0564 -nowarn COMP96_0048 -dbg -work $lib_name"
 }
 
-eval vcom  $compdirectives  $vip_sbi_part_path/src/sbi_bfm_pkg.vhd
+#------------------------------------------------------
+# Compile BFM file
+#------------------------------------------------------
+echo "\nCompiling $lib_name BFM source\n"
+echo "eval vcom  $compdirectives  $source_path/src/sbi_bfm_pkg.vhd"
+eval vcom  $compdirectives  $source_path/src/sbi_bfm_pkg.vhd
