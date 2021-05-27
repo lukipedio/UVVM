@@ -25,7 +25,7 @@ library uvvm_vvc_framework;
 use uvvm_vvc_framework.ti_vvc_framework_support_pkg.all;
 
 library bitvis_vip_scoreboard;
-use bitvis_vip_scoreboard.generic_sb_support_pkg.all;
+use bitvis_vip_scoreboard.generic_sb_support_pkg.C_SB_CONFIG_DEFAULT;
 
 library bitvis_vip_hvvc_to_vvc_bridge;
 
@@ -371,10 +371,8 @@ begin
       end if;
 
       last_cmd_idx_executed <= v_cmd.cmd_idx;
-
-      -- Set vvc_transaction_info back to default values
+      -- Set VVC Transaction Info back to default values
       reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
-
     end loop;
   end process;
 --==========================================================================================

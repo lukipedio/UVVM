@@ -100,15 +100,15 @@ package string_methods_pkg is
     occurrence  : positive := 1 -- stop on N'th occurrence of delimeter pair. Default first occurrence
     ) return string;
 
-  function get_procedure_name_from_instance_name(
+  impure function get_procedure_name_from_instance_name(
     val        : string
     ) return string;
 
-  function get_process_name_from_instance_name(
+  impure function get_process_name_from_instance_name(
     val        : string
     ) return string;
 
-  function get_entity_name_from_instance_name(
+  impure function get_entity_name_from_instance_name(
     val        : string
     ) return string;
 
@@ -194,7 +194,7 @@ package string_methods_pkg is
     truncate        : t_truncate_string := DISALLOW_TRUNCATE
     ) return string;
 
-  function to_string(
+  impure function to_string(
     val             : integer;
     width           : natural;
     justified       : side;
@@ -205,7 +205,7 @@ package string_methods_pkg is
     format          : t_format_zeros := SKIP_LEADING_0 -- | KEEP_LEADING_0
     ) return string;
 
-  function to_string(
+  impure function to_string(
     val             : integer;
     radix           : t_radix;
     prefix          : t_radix_prefix;
@@ -272,6 +272,28 @@ package string_methods_pkg is
     prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
     ) return string;
 
+  impure function to_string(
+    val     : integer_vector;
+    radix   : t_radix        := DEC;
+    format  : t_format_zeros := SKIP_LEADING_0;  -- | KEEP_LEADING_0
+    prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
+    ) return string;
+
+  impure function to_string(
+    val     : t_natural_vector;
+    radix   : t_radix        := DEC;
+    format  : t_format_zeros := SKIP_LEADING_0;  -- | KEEP_LEADING_0
+    prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
+    ) return string;
+
+  function to_string(
+    val     : real_vector
+    ) return string;
+
+  function to_string(
+    val     : time_vector
+    ) return string;
+
   --========================================================
   -- Handle types defined at lower levels
   --========================================================
@@ -327,6 +349,11 @@ package string_methods_pkg is
   function add_msg_delimiter(
     msg : string
   ) return string;
+
+  -- Returns a string with a timestamp and a text. Used in report headers
+  function timestamp_header(
+    value : time;
+    txt   : string) return string;
 
 end package string_methods_pkg;
 
@@ -669,11 +696,17 @@ package body string_methods_pkg is
 --     std_logic,std_logic,std_logic,std_logic_vector,time,string,t_msg_id_panel,t_sbi_config]:msg'
 -- - Procedure name: Search for 2nd last param in path name and remove all inside []
 
-  function get_procedure_name_from_instance_name(
+  impure function get_procedure_name_from_instance_name(
     val        : string
     ) return string is
     variable v_line     : line;
     variable v_msg_line : line;
+    impure function return_and_deallocate return string is
+      constant r : string := v_line.all;
+    begin
+      DEALLOCATE(v_line);
+      return r;
+    end function;
   begin
     bitvis_assert(val'length > 2, FAILURE, "String input is not wide enough (<3)", "get_procedure_name_from_instance_name()");
     write(v_line, get_string_between_delimiters(val, ':', '[', RIGHT));
@@ -684,14 +717,20 @@ package body string_methods_pkg is
     end if;
     bitvis_assert(v_line'length > 0, ERROR, "No procedure name found. " & v_msg_line.all, "get_procedure_name_from_instance_name()");
     DEALLOCATE(v_msg_line);
-    return v_line.all;
+    return return_and_deallocate;
   end;
 
-  function get_process_name_from_instance_name(
+  impure function get_process_name_from_instance_name(
     val        : string
     ) return string is
     variable v_line : line;
     variable v_msg_line : line;
+    impure function return_and_deallocate return string is
+      constant r : string := v_line.all;
+    begin
+      DEALLOCATE(v_line);
+      return r;
+    end function;
   begin
     bitvis_assert(val'length > 2, FAILURE, "String input is not wide enough (<3)", "get_process_name_from_instance_name()");
     write(v_line, get_string_between_delimiters(val, ':', ':', RIGHT));
@@ -701,14 +740,20 @@ package body string_methods_pkg is
       write(v_msg_line, string'(" "));
     end if;
     bitvis_assert(v_line'length > 0, ERROR, "No process name found", "get_process_name_from_instance_name()");
-    return v_line.all;
+    return return_and_deallocate;
   end;
 
-  function get_entity_name_from_instance_name(
+  impure function get_entity_name_from_instance_name(
     val        : string
     ) return string is
     variable v_line : line;
     variable v_msg_line : line;
+    impure function return_and_deallocate return string is
+      constant r : string := v_line.all;
+    begin
+      DEALLOCATE(v_line);
+      return r;
+    end function;
   begin
     bitvis_assert(val'length > 2, FAILURE, "String input is not wide enough (<3)", "get_entity_name_from_instance_name()");
     if string_contains_char(val, '@') then  -- for path with instantiations
@@ -722,7 +767,7 @@ package body string_methods_pkg is
       write(v_msg_line, string'(" "));
     end if;
     bitvis_assert(v_line'length > 0, ERROR, "No entity name found", "get_entity_name_from_instance_name()");
-    return v_line.all;
+    return return_and_deallocate;
   end;
 
 
@@ -872,8 +917,8 @@ package body string_methods_pkg is
     constant alignment_pos2  : natural;  -- Line position of first aligned character in line 2
     constant line_width      : natural
     ) is
-    variable v_string       : string(1 to text_lines'length)  := text_lines.all;
-    variable v_string_width : natural := text_lines'length;
+    constant v_string       : string(1 to text_lines'length)  := text_lines.all;
+    constant v_string_width : natural := text_lines'length;
     variable v_line_no      : natural := 0;
     variable v_last_string_wrap    : natural := 0;
     variable v_min_string_wrap     : natural;
@@ -945,8 +990,8 @@ package body string_methods_pkg is
     variable text_lines   : inout line;
     constant prefix       : string := C_LOG_PREFIX
     ) is
-    variable v_string           : string(1 to text_lines'length)  := text_lines.all;
-    variable v_string_width     : natural := text_lines'length;
+    constant v_string           : string(1 to text_lines'length)  := text_lines.all;
+    constant v_string_width     : natural := text_lines'length;
     constant prefix_width       : natural := prefix'length;
     variable v_last_string_wrap : natural := 0;
     variable i                  : natural := 0; -- for indexing v_string
@@ -1037,7 +1082,7 @@ package body string_methods_pkg is
     return justify(to_string(val), justified, width, format_spaces, truncate);
   end;
 
-  function to_string(
+  impure function to_string(
     val             : integer;
     width           : natural;
     justified       : side;
@@ -1047,11 +1092,17 @@ package body string_methods_pkg is
     prefix          : t_radix_prefix := EXCL_RADIX;
     format          : t_format_zeros := SKIP_LEADING_0 -- | KEEP_LEADING_0
     ) return string is
-    variable v_val_slv : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(val, 32));
+    variable v_val_slv : std_logic_vector(31 downto 0) := std_logic_vector(to_signed(val, 32));
     variable v_line    : line;
-    variable v_result  : string(1 to 40);
     variable v_width   : natural;
     variable v_use_end_char : boolean := false;
+    impure function return_and_deallocate return string is
+      constant r : string := v_line.all;
+    begin
+      DEALLOCATE(v_line);
+      return r;
+    end function;
+
   begin
     if radix = DEC then
       if prefix = INCL_RADIX then
@@ -1075,23 +1126,22 @@ package body string_methods_pkg is
     if v_use_end_char then
       write(v_line, string'(""""));
     end if;
-
-    v_width := v_line'length;
-    v_result(1 to v_width) := v_line.all;
-    deallocate(v_line);
-    return v_result(1 to v_width);
+    return return_and_deallocate;
   end;
 
-  function to_string(
+  impure function to_string(
     val             : integer;
     radix           : t_radix;
     prefix          : t_radix_prefix;
     format          : t_format_zeros := SKIP_LEADING_0 -- | KEEP_LEADING_0
     ) return string is
     variable v_line : line;
+    variable v_len  : natural;
   begin
     write(v_line, to_string(val));
-    return to_string(val, v_line'length, LEFT, SKIP_LEADING_SPACE, DISALLOW_TRUNCATE, radix, prefix, format);
+    v_len := v_line'length;
+    deallocate(v_line);
+    return to_string(val, v_len, LEFT, SKIP_LEADING_SPACE, DISALLOW_TRUNCATE, radix, prefix, format);
   end;
 
   -- This function has been deprecated and will be removed in the next major release
@@ -1147,14 +1197,18 @@ package body string_methods_pkg is
       end if;
       write(v_line, adjust_leading_0(to_hstring(val), format));
     elsif radix = DEC then
-      if prefix = INCL_RADIX then
-        write(v_line, string'("d"""));
-        v_use_end_char := true;
-      end if;
       -- Assuming that val is not signed
       if (val'length > 31) then
+        if prefix = INCL_RADIX then
+          write(v_line, string'("x"""));
+          v_use_end_char := true;
+        end if;
         write(v_line, to_hstring(val) & " (too wide to be converted to integer)" );
       else
+        if prefix = INCL_RADIX then
+          write(v_line, string'("d"""));
+          v_use_end_char := true;
+        end if;
         write(v_line, adjust_leading_0(to_string(to_integer(unsigned(val))), format));
       end if;
     elsif radix = HEX_BIN_IF_INVALID then
@@ -1204,7 +1258,7 @@ package body string_methods_pkg is
     prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
     ) return string is
     variable v_line         : line;
-    variable v_result       : string(1 to 10 + 2 * val'length); --
+    variable v_result       : string(1 to 20 + 2 * val'length); --
     variable v_width        : natural;
     variable v_use_end_char : boolean := false;
   begin
@@ -1216,13 +1270,13 @@ package body string_methods_pkg is
         return "";
       end if;
 
-      if prefix = INCL_RADIX then
-        write(v_line, string'("d"""));
-        v_use_end_char := true;
-      end if;
       if (val'length > 32) then
-        write(v_line, to_string(std_logic_vector(val),radix, format, prefix) & " (too wide to be converted to integer)" );
+        write(v_line, to_string(std_logic_vector(val), HEX, format, prefix) & " (too wide to be converted to integer)" );
       else
+        if prefix = INCL_RADIX then
+          write(v_line, string'("d"""));
+          v_use_end_char := true;
+        end if;
         write(v_line, adjust_leading_0(to_string(to_integer(signed(val))), format));
       end if;
 
@@ -1246,10 +1300,28 @@ package body string_methods_pkg is
     format  : t_format_zeros := KEEP_LEADING_0;  -- | SKIP_LEADING_0
     prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
     ) return string is
+
+      -- helper function to prevent null arrays
+      function get_string_len(val : t_slv_array) return integer is
+        variable v_parantheses            : integer := 2; -- parentheses
+        variable v_commas                 : integer := 0; -- commas
+        variable v_radix_prefix           : integer := 0; -- Radix prefixes
+        variable v_max_array_element_len  : integer := 0; -- Maximum length of the array elements
+        variable v_max_ext_msg_len        : integer := 0; -- Extra length of element in case of potential message "too wide to convert to integer"
+      begin
+        if val'length > 0 then
+          v_commas          := 2 * (val'length - 1);
+          v_radix_prefix    := 3 * val'length;
+          v_max_ext_msg_len := 14 * val'length;
+          if val'low >= 0 then
+            v_max_array_element_len := val(val'low)'length * val'length;
+          end if;
+        end if;
+        return (v_parantheses + v_commas + v_radix_prefix + v_max_array_element_len + v_max_ext_msg_len);
+      end function;
+
     variable v_line   : line;
-    variable v_result : string(1 to 2 +            -- parentheses
-                              2*(val'length - 1) + -- commas
-                              26*val'length);      -- 26 is max length of returned value from slv to_string()
+    variable v_result : string(1 to get_string_len(val)); 
     variable v_width  : natural;
   begin
     if val'length = 0 then
@@ -1283,10 +1355,28 @@ package body string_methods_pkg is
     format  : t_format_zeros := KEEP_LEADING_0;  -- | SKIP_LEADING_0
     prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
     ) return string is
+
+      -- helper function to prevent null arrays
+      function get_string_len(val : t_signed_array) return integer is
+        variable v_parantheses            : integer := 2; -- parentheses
+        variable v_commas                 : integer := 0; -- commas
+        variable v_radix_prefix           : integer := 0; -- Radix prefixes
+        variable v_max_array_element_len  : integer := 0; -- Maximum length of the array elements
+        variable v_max_ext_msg_len        : integer := 0; -- Extra length of element in case of potential message "too wide to convert to integer"
+      begin
+        if val'length > 0 then
+          v_commas          := 2 * (val'length - 1);
+          v_radix_prefix    := 3 * val'length;
+          v_max_ext_msg_len := 14 * val'length;
+          if val'low >= 0 then
+            v_max_array_element_len := val(val'low)'length * val'length;
+          end if;
+        end if;
+        return (v_parantheses + v_commas + v_radix_prefix + v_max_array_element_len + v_max_ext_msg_len);
+      end function;
+
     variable v_line   : line;
-    variable v_result : string(1 to 2 +             -- parentheses
-                               2*(val'length - 1) + -- commas
-                               26*val'length);      -- 26 is max length of returned value from slv to_string()
+    variable v_result : string(1 to get_string_len(val)); 
     variable v_width  : natural;
   begin
     if val'length = 0 then
@@ -1320,10 +1410,28 @@ package body string_methods_pkg is
     format  : t_format_zeros := KEEP_LEADING_0;  -- | SKIP_LEADING_0
     prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
     ) return string is
+
+      -- helper function to prevent null arrays
+      function get_string_len(val : t_unsigned_array) return integer is
+        variable v_parantheses            : integer := 2; -- parentheses
+        variable v_commas                 : integer := 0; -- commas
+        variable v_radix_prefix           : integer := 0; -- Radix prefixes
+        variable v_max_array_element_len  : integer := 0; -- Maximum length of the array elements
+        variable v_max_ext_msg_len        : integer := 0; -- Extra length of element in case of potential message "too wide to convert to integer"
+      begin
+        if val'length > 0 then
+          v_commas          := 2 * (val'length - 1);
+          v_radix_prefix    := 3 * val'length;
+          v_max_ext_msg_len := 14 * val'length;
+          if val'low >= 0 then
+            v_max_array_element_len := val(val'low)'length * val'length;
+          end if;
+        end if;
+        return (v_parantheses + v_commas + v_radix_prefix + v_max_array_element_len + v_max_ext_msg_len);
+      end function;
+
     variable v_line   : line;
-    variable v_result : string(1 to 2 +             -- parentheses
-                               2*(val'length - 1) + -- commas
-                               26*val'length);      -- 26 is max length of returned value from slv to_string()
+    variable v_result : string(1 to get_string_len(val));              
     variable v_width  : natural;
   begin
     if val'length = 0 then
@@ -1334,6 +1442,121 @@ package body string_methods_pkg is
 
       for idx in val'range loop
         write(v_line, to_string(val(idx), radix, format, prefix));
+
+        if (idx < val'right) and (val'ascending) then
+          write(v_line, string'(", "));
+        elsif (idx > val'right) and not(val'ascending) then
+          write(v_line, string'(", "));
+        end if;
+
+      end loop;
+      write(v_line, string'(")"));
+
+      v_width := v_line'length;
+      v_result(1 to v_width) := v_line.all;
+      deallocate(v_line);
+      return v_result(1 to v_width);
+    end if;
+  end function;
+
+  impure function to_string(
+    val     : integer_vector;
+    radix   : t_radix        := DEC;
+    format  : t_format_zeros := SKIP_LEADING_0;  -- | KEEP_LEADING_0
+    prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
+    ) return string is
+    variable v_line   : line;
+    variable v_result : string(1 to 2 +            -- parentheses
+                              2*(val'length - 1) + -- commas
+                              32*val'length);
+    variable v_width  : natural;
+  begin
+    if val'length = 0 then
+      return "";
+    else
+      -- Comma-separate all array members and return
+      write(v_line, string'("("));
+
+      for idx in val'range loop
+        write(v_line, to_string(val(idx), radix, prefix, format));
+
+        if (idx < val'right) and (val'ascending) then
+          write(v_line, string'(", "));
+        elsif (idx > val'right) and not(val'ascending) then
+          write(v_line, string'(", "));
+        end if;
+
+      end loop;
+      write(v_line, string'(")"));
+
+      v_width := v_line'length;
+      v_result(1 to v_width) := v_line.all;
+      deallocate(v_line);
+      return v_result(1 to v_width);
+    end if;
+  end function;
+
+  impure function to_string(
+    val     : t_natural_vector;
+    radix   : t_radix        := DEC;
+    format  : t_format_zeros := SKIP_LEADING_0;  -- | KEEP_LEADING_0
+    prefix  : t_radix_prefix := EXCL_RADIX -- Insert radix prefix in string?
+    ) return string is
+  begin
+    return to_string(integer_vector(val), radix, format, prefix);
+  end function;
+
+  function to_string(
+    val     : real_vector
+    ) return string is
+    variable v_line   : line;
+    variable v_result : string(1 to 2 +            -- parentheses
+                              2*(val'length - 1) + -- commas
+                              32*val'length);
+    variable v_width  : natural;
+  begin
+    if val'length = 0 then
+      return "";
+    else
+      -- Comma-separate all array members and return
+      write(v_line, string'("("));
+
+      for idx in val'range loop
+        write(v_line, to_string(val(idx)));
+
+        if (idx < val'right) and (val'ascending) then
+          write(v_line, string'(", "));
+        elsif (idx > val'right) and not(val'ascending) then
+          write(v_line, string'(", "));
+        end if;
+
+      end loop;
+      write(v_line, string'(")"));
+
+      v_width := v_line'length;
+      v_result(1 to v_width) := v_line.all;
+      deallocate(v_line);
+      return v_result(1 to v_width);
+    end if;
+  end function;
+
+  function to_string(
+    val     : time_vector
+    ) return string is
+    variable v_line   : line;
+    variable v_result : string(1 to 2 +            -- parentheses
+                              2*(val'length - 1) + -- commas
+                              32*val'length);
+    variable v_width  : natural;
+  begin
+    if val'length = 0 then
+      return "";
+    else
+      -- Comma-separate all array members and return
+      write(v_line, string'("("));
+
+      for idx in val'range loop
+        write(v_line, to_string(val(idx)));
 
         if (idx < val'right) and (val'ascending) then
           write(v_line, string'(", "));
@@ -1398,11 +1621,15 @@ package body string_methods_pkg is
     val   : t_alert_attention_counters;
     order : t_order := FINAL
     ) is
-    variable v_line          : line;
-    variable v_line_copy     : line;
-    variable v_more_than_expected_alerts : boolean := false;
-    variable v_less_than_expected_alerts      : boolean := false;
-    constant prefix          : string := C_LOG_PREFIX & "     ";
+    variable v_line                             : line;
+    variable v_line_copy                        : line;
+    variable v_more_than_expected_alerts        : boolean := false;
+    variable v_less_than_expected_alerts        : boolean := false;
+    variable v_more_than_expected_minor_alerts  : boolean := false;
+    variable v_less_than_expected_minor_alerts  : boolean := false;
+    constant prefix                             : string := C_LOG_PREFIX & "     ";
+
+    -- NOTE, TB_NOTE, WARNING, TB_WARNING, MANUAL_CHECK
   begin
     if order = INTERMEDIATE then
       write(v_line,
@@ -1435,6 +1662,12 @@ package body string_methods_pkg is
           else
             v_more_than_expected_alerts  := true;
           end if;
+        else
+          if (val(i)(REGARD) < val(i)(EXPECT)) then
+            v_less_than_expected_minor_alerts := true;
+          else
+            v_more_than_expected_minor_alerts := true;
+          end if;
         end if;
       end if;
     end loop;
@@ -1446,6 +1679,8 @@ package body string_methods_pkg is
         write(v_line, ">> Simulation FAILED, with unexpected serious alert(s)" & LF);
       elsif v_less_than_expected_alerts then
         write(v_line, ">> Simulation FAILED: Mismatch between counted and expected serious alerts" & LF);
+      elsif v_more_than_expected_minor_alerts or v_less_than_expected_minor_alerts then
+        write(v_line, ">> Simulation SUCCESS: No mismatch between counted and expected serious alerts, but mismatch in minor alerts" & LF);
       else
         write(v_line, ">> Simulation SUCCESS: No mismatch between counted and expected serious alerts" & LF);
       end if;
@@ -1459,6 +1694,8 @@ package body string_methods_pkg is
     write (v_line_copy, v_line.all);  -- copy line
     writeline(OUTPUT, v_line);
     writeline(LOG_FILE, v_line_copy);
+    deallocate(v_line);
+    deallocate(v_line_copy);
   end;
 
   procedure to_string(
@@ -1500,6 +1737,8 @@ package body string_methods_pkg is
       write (v_line_copy, v_line.all);  -- copy line
       writeline(OUTPUT, v_line);
       writeline(LOG_FILE, v_line_copy);
+      deallocate(v_line);
+      deallocate(v_line_copy);
     end;
 
 
@@ -1566,8 +1805,6 @@ package body string_methods_pkg is
     end if;
   end;
 
-
-
   function add_msg_delimiter(
     msg : string
   ) return string is
@@ -1583,4 +1820,40 @@ package body string_methods_pkg is
     end if;
     return "";
   end;
+
+  -- Returns a string with a timestamp and a text. Used in report headers
+  function timestamp_header(
+    value : time;
+    txt   : string) return string is
+    variable v_line             : line;
+    variable v_delimiter_pos    : natural;
+    variable v_timestamp_width  : natural;
+    variable v_result           : string(1 to 50);
+    variable v_return           : string(1 to txt'length) := txt;
+  begin
+    -- get a time stamp
+    write(v_line, value, LEFT, 0, C_LOG_TIME_BASE);
+    v_timestamp_width := v_line'length;
+    v_result(1 to v_timestamp_width) := v_line.all;
+    deallocate(v_line);
+    v_delimiter_pos := pos_of_leftmost('.', v_result(1 to v_timestamp_width), 0);
+
+    -- truncate decimals and add units
+    if v_delimiter_pos > 0 then
+      if C_LOG_TIME_BASE = ns then
+        v_result(v_delimiter_pos+2 to v_delimiter_pos+4) := " ns";
+      else
+        v_result(v_delimiter_pos+2 to v_delimiter_pos+4) := " ps";
+      end if;
+      v_timestamp_width := v_delimiter_pos + 4;
+    end if;
+    -- add a space after the timestamp
+    v_timestamp_width := v_timestamp_width + 1;
+    v_result(v_timestamp_width to v_timestamp_width) := " ";
+
+    -- add time string to return string
+    v_return := v_result(1 to v_timestamp_width) & txt(1 to txt'length-v_timestamp_width);
+    return v_return(1 to txt'length);
+  end function timestamp_header;
+
 end package body string_methods_pkg;

@@ -43,7 +43,7 @@ package adaptations_pkg is
   constant C_LOG_TIME_WIDTH     : natural := 16; -- 3 chars used for unit eg. " ns"
   constant C_LOG_TIME_BASE      : time    := ns; -- Unit in which time is shown in log (ns | ps)
   constant C_LOG_TIME_DECIMALS  : natural := 1; -- Decimals to show for given C_LOG_TIME_BASE
-  constant C_LOG_SCOPE_WIDTH    : natural := 30; -- Maximum scope length, has to match C_HIERARCHY_NODE_NAME_LENGTH in types_pkg
+  constant C_LOG_SCOPE_WIDTH    : natural := 30; -- Maximum scope length
   constant C_LOG_LINE_WIDTH     : natural := 175;
   constant C_LOG_INFO_WIDTH     : natural := C_LOG_LINE_WIDTH - C_LOG_PREFIX_WIDTH;
 
@@ -67,6 +67,8 @@ package adaptations_pkg is
 
   constant C_USE_STD_STOP_ON_ALERT_STOP_LIMIT : boolean := true; -- true: break using std.env.stop, false: break using failure
 
+  constant C_ENABLE_CHECK_COUNTER : boolean := False; -- enable/disable check_counter to count number of check calls.
+ 
   shared variable shared_default_log_destination : t_log_destination := CONSOLE_AND_LOG;
 
   --------------------------------------------------------------------------------------------------------------------------------
@@ -103,6 +105,7 @@ package adaptations_pkg is
     ID_BFM_WAIT,              -- Used inside a BFM to indicate that it is waiting for something (e.g. for ready)
     ID_BFM_POLL,              -- Used inside a BFM when polling until reading a given value. I.e. to show all reads until expected value found (e.g. for sbi_poll_until())
     ID_BFM_POLL_SUMMARY,      -- Used inside a BFM when showing the summary of data that has been received while waiting for expected data.
+    ID_CHANNEL_BFM,           -- Used inside a BFM when the protocol is split into separate channels
     ID_TERMINATE_CMD,         -- Typically used inside a loop in a procedure to end the loop (e.g. for sbi_poll_until() or any looped generation of random stimuli
     -- Packet related data Ids with three levels of granularity, for differentiating between frames, packets and segments.
     -- Segment Ids, finest granularity of packet data
@@ -123,7 +126,7 @@ package adaptations_pkg is
     ID_FRAME_COMPLETE,        -- Notify that a frame has been transmitted or received
     ID_FRAME_HDR,             -- Notify that a frame header has been transmitted or received. It also writes header info
     ID_FRAME_DATA,            -- Notify that a frame data has been transmitted or received. It also writes frame data
-    -- OSVVM Ids
+    -- Coverage Ids
     ID_COVERAGE_MAKEBIN,      -- Log messages from MakeBin (IllegalBin/GenBin/IgnoreBin)
     ID_COVERAGE_ADDBIN,       -- Log messages from AddBin/AddCross
     ID_COVERAGE_ICOVER,       -- ICover logging, NB: Very low level debugging. Can result in large amount of data.
@@ -140,6 +143,8 @@ package adaptations_pkg is
     ID_IMMEDIATE_CMD_WAIT,    -- Message from VVC interpreter that an IMMEDIATE command is waiting for command to complete
     ID_CMD_EXECUTOR,          -- Message from VVC executor about correctly received command - prior to actual execution
     ID_CMD_EXECUTOR_WAIT,     -- Message from VVC executor that it is actively waiting for a command
+    ID_CHANNEL_EXECUTOR,      -- Message from a channel specific VVC executor process
+    ID_CHANNEL_EXECUTOR_WAIT, -- Message from a channel specific VVC executor process that it is actively waiting for a command
     ID_NEW_HVVC_CMD_SEQ,      -- Message from a lower level VVC which receives a new command sequence from an HVVC
     ID_INSERTED_DELAY,        -- Message from VVC executor that it is waiting a given delay
     -- Await completion
@@ -183,9 +188,6 @@ package adaptations_pkg is
     others              => ENABLED
   );
 
-  -- If false, OSVVM uses the default message id panel. If true, it uses a separate message id panel.
-  constant C_USE_LOCAL_OSVVM_MSG_ID_PANELS : boolean := TRUE;
-
   type  t_msg_id_indent is array (t_msg_id'left to t_msg_id'right) of string(1 to 4);
   constant C_MSG_ID_INDENT : t_msg_id_indent := (
     ID_IMMEDIATE_CMD_WAIT    => "  ..",
@@ -218,9 +220,9 @@ package adaptations_pkg is
   -- Hierarchical alerts
   --------------------------------------------------------------------------------------------------------------------------------
   constant C_ENABLE_HIERARCHICAL_ALERTS : boolean := false;
-  constant C_BASE_HIERARCHY_LEVEL : string(1 to 5) := "Total";
-
-  constant C_EMPTY_NODE : t_hierarchy_node := ("                              ",
+  constant C_BASE_HIERARCHY_LEVEL       : string(1 to 5) := "Total";
+  constant C_HIERARCHY_NODE_NAME_LENGTH : natural := C_LOG_SCOPE_WIDTH;
+  constant C_EMPTY_NODE : t_hierarchy_node := ((1 to C_HIERARCHY_NODE_NAME_LENGTH => ' '),
                                                 (others => (others => 0)),
                                                 (others => 0),
                                                 (others => true));
@@ -258,9 +260,12 @@ package adaptations_pkg is
 
   -- Default message Id panel intended for use in the VVCs
   constant C_VVC_MSG_ID_PANEL_DEFAULT : t_msg_id_panel := (
-    ID_NEVER         => DISABLED,
-    ID_UTIL_BURIED   => DISABLED,
-    others           => ENABLED
+    ID_NEVER                  => DISABLED,
+    ID_UTIL_BURIED            => DISABLED,
+    ID_CHANNEL_BFM            => DISABLED,
+    ID_CHANNEL_EXECUTOR       => DISABLED,
+    ID_CHANNEL_EXECUTOR_WAIT  => DISABLED,
+    others                    => ENABLED
   );
 
   -- Deprecated, will be removed.
@@ -293,21 +298,18 @@ package adaptations_pkg is
     -- User can add more channels if needed below.
   );
 
-  constant C_CMD_IDX_PREFIX : string := " [";
-  constant C_CMD_IDX_SUFFIX : string := "]";
-
-  constant C_VVCT_ALL_INSTANCES, ALL_INSTANCES : integer := -2;
-  constant ALL_ENABLED_INSTANCES : integer := -3;
-
   constant C_NUM_SEMAPHORE_LOCK_TRIES : natural := 500;
+
+    
+  constant C_MAX_QUEUE_INSTANCE_NUM : positive  := 100; -- Maximum number of generic queue instances
 
   --------------------------------------------------------------------------------------------------------------------------------
   -- Scoreboard adaptations
   --------------------------------------------------------------------------------------------------------------------------------
-  constant C_MAX_QUEUE_INSTANCE_NUM : positive := 100; -- Maximum number of instances
-  constant C_SB_TAG_WIDTH           : positive := 128; -- Number of characters in SB tag
-  constant C_SB_SOURCE_WIDTH        : positive := 128; -- Number of characters in SB source element
-  constant C_SB_SLV_WIDTH           : positive := 128; -- Width of the SLV in the predefined SLV SB
+  alias C_MAX_SB_INSTANCE_IDX       is C_MAX_QUEUE_INSTANCE_NUM; -- Maximum number of SB instances
+  constant C_SB_TAG_WIDTH           : positive  := 128; -- Number of characters in SB tag
+  constant C_SB_SOURCE_WIDTH        : positive  := 128; -- Number of characters in SB source element
+  constant C_SB_SLV_WIDTH           : positive  := 128; -- Width of the SLV in the predefined SLV SB
 
   -- Default message Id panel intended for use in SB
   constant C_SB_MSG_ID_PANEL_DEFAULT : t_msg_id_panel := (
@@ -315,6 +317,11 @@ package adaptations_pkg is
     ID_DATA => DISABLED,
     others  => DISABLED
   );
+
+  --------------------------------------------------------------------------------------------------------------------------------
+  -- VVC Adaptions
+  --------------------------------------------------------------------------------------------------------------------------------
+  constant C_SPI_VVC_DATA_ARRAY_WIDTH : natural := 31; -- Width of SPI VVC data array for SPI VVC and transaction package defaults.
 
   --------------------------------------------------------------------------------------------------------------------------------
   -- Hierarchical-VVCs
@@ -348,6 +355,14 @@ package adaptations_pkg is
   -- The code below is not intended for user modifications!
   -- *****************************************************************************************************************************
   --------------------------------------------------------------------------------------------------------------------------------
+
+  constant C_CMD_IDX_PREFIX       : string := " [";
+  constant C_CMD_IDX_SUFFIX       : string := "]";
+
+  constant ALL_INSTANCES          : integer := -2;
+  constant ALL_ENABLED_INSTANCES  : integer := -3;
+
+
   type t_vvc_id is record
     name      : string(1 to C_MAX_VVC_NAME_LENGTH);
     instance  : natural;
@@ -360,12 +375,14 @@ package adaptations_pkg is
   );
 
   type t_vvc_state is record
-    activity              : t_activity;
-    last_cmd_idx_executed : integer;
+    activity                  : t_activity;
+    last_cmd_idx_executed     : integer;
+    await_selected_supported  : boolean;
   end record;
   constant  C_VVC_STATE_DEFAULT : t_vvc_state := (
-    activity              => INACTIVE,
-    last_cmd_idx_executed => -1
+    activity                  => INACTIVE,
+    last_cmd_idx_executed     => -1,
+    await_selected_supported  => true
   );
 
   -- These values are used to indicate outdated sub-programs

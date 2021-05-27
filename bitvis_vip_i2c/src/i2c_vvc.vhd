@@ -25,7 +25,7 @@ library uvvm_vvc_framework;
 use uvvm_vvc_framework.ti_vvc_framework_support_pkg.all;
 
 library bitvis_vip_scoreboard;
-use bitvis_vip_scoreboard.generic_sb_support_pkg.all;
+use bitvis_vip_scoreboard.generic_sb_support_pkg.C_SB_CONFIG_DEFAULT;
 
 use work.i2c_bfm_pkg.all;
 use work.vvc_methods_pkg.all;
@@ -341,7 +341,7 @@ begin
             if v_cmd.data_routing = TO_SB then
               -- call SB check_received
               for i in 0 to v_cmd.num_bytes-1 loop
-                I2C_VVC_SB.check_received(GC_INSTANCE_IDX, v_read_data(i));
+                I2C_VVC_SB.check_received(GC_INSTANCE_IDX, pad_i2c_sb(v_read_data(i)));
               end loop;
             else                            
               -- Store the result
@@ -416,7 +416,7 @@ begin
           else  -- attempted slave transmit when in master mode
             alert(error, "Slave transmit called when VVC is in master mode.", C_SCOPE);
           end if;
-
+          
         when SLAVE_RECEIVE =>
           if not GC_MASTER_MODE then    -- requires slave mode
             -- Set vvc transaction info
@@ -437,7 +437,7 @@ begin
             if v_cmd.data_routing = TO_SB then
               -- call SB check_received
               for i in 0 to v_cmd.num_bytes-1 loop
-                I2C_VVC_SB.check_received(GC_INSTANCE_IDX, v_read_data(i));
+                I2C_VVC_SB.check_received(GC_INSTANCE_IDX, pad_i2c_sb(v_read_data(i)));
               end loop;
             else                            
               -- Store the result
@@ -506,10 +506,8 @@ begin
       last_cmd_idx_executed <= v_cmd.cmd_idx;
       -- Reset the transaction info for waveview
       transaction_info      := C_TRANSACTION_INFO_DEFAULT;
-
-      -- Set vvc transaction info back to default values
+      -- Set VVC Transaction Info back to default values
       reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
-
     end loop;
   end process;
   --===============================================================================================

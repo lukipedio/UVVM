@@ -28,7 +28,7 @@ library uvvm_vvc_framework;
 use uvvm_vvc_framework.ti_vvc_framework_support_pkg.all;
 
 library bitvis_vip_scoreboard;
-use bitvis_vip_scoreboard.generic_sb_support_pkg.all;
+use bitvis_vip_scoreboard.generic_sb_support_pkg.C_SB_CONFIG_DEFAULT;
 
 use work.sbi_bfm_pkg.all;
 use work.vvc_methods_pkg.all;
@@ -108,6 +108,7 @@ architecture behave of sbi_vvc is
     end if;
   end function;
 
+
 begin
 
 
@@ -133,7 +134,7 @@ begin
   begin
 
     -- 0. Initialize the process prior to first command
-    initialize_interpreter(terminate_current_cmd, global_awaiting_completion);
+    work.td_vvc_entity_support_pkg.initialize_interpreter(terminate_current_cmd, global_awaiting_completion);
 
     -- initialise shared_vvc_last_received_cmd_idx for channel and instance
     shared_vvc_last_received_cmd_idx(NA, GC_INSTANCE_IDX) := 0;
@@ -149,7 +150,7 @@ begin
       -- 1. wait until command targeted at this VVC. Must match VVC name, instance and channel (if applicable)
       --    releases global semaphore
       -------------------------------------------------------------------------
-      await_cmd_from_sequencer(C_VVC_LABELS, vvc_config, THIS_VVCT, VVC_BROADCAST, global_vvc_busy, global_vvc_ack, v_local_vvc_cmd);
+      work.td_vvc_entity_support_pkg.await_cmd_from_sequencer(C_VVC_LABELS, vvc_config, THIS_VVCT, VVC_BROADCAST, global_vvc_busy, global_vvc_ack, v_local_vvc_cmd);
       v_cmd_has_been_acked := false; -- Clear flag
       -- update shared_vvc_last_received_cmd_idx with received command index
       shared_vvc_last_received_cmd_idx(NA, GC_INSTANCE_IDX) := v_local_vvc_cmd.cmd_idx;
@@ -160,7 +161,7 @@ begin
       -- 2a. Put command on the queue if intended for the executor
       -------------------------------------------------------------------------
       if v_local_vvc_cmd.command_type = QUEUED then
-        put_command_on_queue(v_local_vvc_cmd, command_queue, vvc_status, queue_is_increasing);
+        work.td_vvc_entity_support_pkg.put_command_on_queue(v_local_vvc_cmd, command_queue, vvc_status, queue_is_increasing);
 
 
         -- 2b. Otherwise command is intended for immediate response
@@ -176,30 +177,30 @@ begin
         case v_local_vvc_cmd.operation is
 
           when AWAIT_COMPLETION =>
-            interpreter_await_completion(v_local_vvc_cmd, command_queue, vvc_config, executor_is_busy, C_VVC_LABELS, last_cmd_idx_executed);
+            work.td_vvc_entity_support_pkg.interpreter_await_completion(v_local_vvc_cmd, command_queue, vvc_config, executor_is_busy, C_VVC_LABELS, last_cmd_idx_executed);
 
           when AWAIT_ANY_COMPLETION =>
             if not v_local_vvc_cmd.gen_boolean then
               -- Called with lastness = NOT_LAST: Acknowledge immediately to let the sequencer continue
-              acknowledge_cmd(global_vvc_ack,v_local_vvc_cmd.cmd_idx);
+              work.td_target_support_pkg.acknowledge_cmd(global_vvc_ack,v_local_vvc_cmd.cmd_idx);
               v_cmd_has_been_acked := true;
             end if;
-            interpreter_await_any_completion(v_local_vvc_cmd, command_queue, vvc_config, executor_is_busy, C_VVC_LABELS, last_cmd_idx_executed, global_awaiting_completion);
+            work.td_vvc_entity_support_pkg.interpreter_await_any_completion(v_local_vvc_cmd, command_queue, vvc_config, executor_is_busy, C_VVC_LABELS, last_cmd_idx_executed, global_awaiting_completion);
 
           when DISABLE_LOG_MSG =>
-            disable_log_msg(v_local_vvc_cmd.msg_id, vvc_config.msg_id_panel, to_string(v_local_vvc_cmd.msg) & format_command_idx(v_local_vvc_cmd), C_SCOPE, v_local_vvc_cmd.quietness);
+            uvvm_util.methods_pkg.disable_log_msg(v_local_vvc_cmd.msg_id, vvc_config.msg_id_panel, to_string(v_local_vvc_cmd.msg) & format_command_idx(v_local_vvc_cmd), C_SCOPE, v_local_vvc_cmd.quietness);
 
           when ENABLE_LOG_MSG =>
-            enable_log_msg(v_local_vvc_cmd.msg_id, vvc_config.msg_id_panel, to_string(v_local_vvc_cmd.msg) & format_command_idx(v_local_vvc_cmd), C_SCOPE, v_local_vvc_cmd.quietness);
+            uvvm_util.methods_pkg.enable_log_msg(v_local_vvc_cmd.msg_id, vvc_config.msg_id_panel, to_string(v_local_vvc_cmd.msg) & format_command_idx(v_local_vvc_cmd), C_SCOPE, v_local_vvc_cmd.quietness);
 
           when FLUSH_COMMAND_QUEUE =>
-            interpreter_flush_command_queue(v_local_vvc_cmd, command_queue, vvc_config, vvc_status, C_VVC_LABELS);
+            work.td_vvc_entity_support_pkg.interpreter_flush_command_queue(v_local_vvc_cmd, command_queue, vvc_config, vvc_status, C_VVC_LABELS);
 
           when TERMINATE_CURRENT_COMMAND =>
-            interpreter_terminate_current_command(v_local_vvc_cmd, vvc_config, C_VVC_LABELS, terminate_current_cmd);
+            work.td_vvc_entity_support_pkg.interpreter_terminate_current_command(v_local_vvc_cmd, vvc_config, C_VVC_LABELS, terminate_current_cmd);
 
           when FETCH_RESULT =>
-            interpreter_fetch_result(result_queue, v_local_vvc_cmd, vvc_config, C_VVC_LABELS, last_cmd_idx_executed, shared_vvc_response);
+            work.td_vvc_entity_support_pkg.interpreter_fetch_result(result_queue, v_local_vvc_cmd, vvc_config, C_VVC_LABELS, last_cmd_idx_executed, shared_vvc_response);
 
           when others =>
             tb_error("Unsupported command received for IMMEDIATE execution: '" & to_string(v_local_vvc_cmd.operation) & "'", C_SCOPE);
@@ -218,7 +219,7 @@ begin
       -- 3. Acknowledge command after runing or queuing the command
       -------------------------------------------------------------------------
       if not v_cmd_has_been_acked then
-        acknowledge_cmd(global_vvc_ack,v_local_vvc_cmd.cmd_idx);
+        work.td_target_support_pkg.acknowledge_cmd(global_vvc_ack,v_local_vvc_cmd.cmd_idx);
       end if;
 
     end loop;
@@ -247,7 +248,7 @@ begin
 
     -- 0. Initialize the process prior to first command
     -------------------------------------------------------------------------
-    initialize_executor(terminate_current_cmd);
+    work.td_vvc_entity_support_pkg.initialize_executor(terminate_current_cmd);
     -- Set initial value of v_msg_id_panel to msg_id_panel in config
     v_msg_id_panel := vvc_config.msg_id_panel;
 
@@ -265,7 +266,7 @@ begin
 
       -- 1. Set defaults, fetch command and log
       -------------------------------------------------------------------------
-      fetch_command_and_prepare_executor(v_cmd, command_queue, vvc_config, vvc_status, queue_is_increasing, executor_is_busy, C_VVC_LABELS);
+      work.td_vvc_entity_support_pkg.fetch_command_and_prepare_executor(v_cmd, command_queue, vvc_config, vvc_status, queue_is_increasing, executor_is_busy, C_VVC_LABELS);
 
       -- update vvc activity
       update_vvc_activity_register(global_trigger_vvc_activity_register, vvc_status, ACTIVE, entry_num_in_vvc_activity_register, last_cmd_idx_executed, command_queue.is_empty(VOID), C_SCOPE);
@@ -289,12 +290,12 @@ begin
       end if;
 
       -- Insert delay if needed
-      insert_inter_bfm_delay_if_requested(vvc_config                         => vvc_config,
-                                          command_is_bfm_access              => v_prev_command_was_bfm_access,
-                                          timestamp_start_of_last_bfm_access => v_timestamp_start_of_last_bfm_access,
-                                          timestamp_end_of_last_bfm_access   => v_timestamp_end_of_last_bfm_access,
-                                          scope                              => C_SCOPE,
-                                          msg_id_panel                       => v_msg_id_panel);
+      work.td_vvc_entity_support_pkg.insert_inter_bfm_delay_if_requested(vvc_config                         => vvc_config,
+                                                                         command_is_bfm_access              => v_prev_command_was_bfm_access,
+                                                                         timestamp_start_of_last_bfm_access => v_timestamp_start_of_last_bfm_access,
+                                                                         timestamp_end_of_last_bfm_access   => v_timestamp_end_of_last_bfm_access,
+                                                                         scope                              => C_SCOPE,
+                                                                         msg_id_panel                       => v_msg_id_panel);
 
       if v_command_is_bfm_access then
         v_timestamp_start_of_current_bfm_access := now;
@@ -341,9 +342,14 @@ begin
 
             -- Set VVC Transaction Info back to default values
             reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
+
+            -- exit loop if terminate_current_cmd is requested
+            if terminate_current_cmd.is_active = '1' then
+              exit;
+            end if;
           end loop;
 
-
+    
         when READ =>
           -- Set VVC Transaction Info
           set_global_vvc_transaction_info(vvc_transaction_info_trigger, vvc_transaction_info, v_cmd, vvc_config);
@@ -366,13 +372,12 @@ begin
           -- Request SB check result
           if v_cmd.data_routing = TO_SB then
             -- call SB check_received
-            SBI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_sb_slv(v_read_data(GC_DATA_WIDTH-1 downto 0)));
+            SBI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_sbi_sb(v_read_data(GC_DATA_WIDTH-1 downto 0)));
           else
             work.td_vvc_entity_support_pkg.store_result(result_queue => result_queue,
                                                          cmd_idx     => v_cmd.cmd_idx,
                                                          result      => v_read_data);
           end if;
-
 
         when CHECK =>
           -- Set VVC Transaction Info
@@ -394,7 +399,6 @@ begin
                     scope        => C_SCOPE,
                     msg_id_panel => v_msg_id_panel,
                     config       => vvc_config.bfm_config);
-
 
         when POLL_UNTIL =>
           -- Set VVC Transaction Info
@@ -419,8 +423,6 @@ begin
                          scope          => C_SCOPE,
                          msg_id_panel   => v_msg_id_panel,
                          config         => vvc_config.bfm_config);
-
-
 
           -- UVVM common operations
           --===================================
@@ -453,13 +455,12 @@ begin
       -- Reset terminate flag if any occurred
       if (terminate_current_cmd.is_active = '1') then
         log(ID_CMD_EXECUTOR, "Termination request received", C_SCOPE, v_msg_id_panel);
-        reset_flag(terminate_current_cmd);
+        uvvm_vvc_framework.ti_vvc_framework_support_pkg.reset_flag(terminate_current_cmd);
       end if;
 
       last_cmd_idx_executed <= v_cmd.cmd_idx;
       -- Reset the transaction info for waveview
       transaction_info      := C_TRANSACTION_INFO_DEFAULT;
-
       -- Set VVC Transaction Info back to default values
       reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
     end loop;

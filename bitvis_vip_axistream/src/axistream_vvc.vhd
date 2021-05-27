@@ -335,8 +335,8 @@ begin
 
                   -- Request SB check result
                   if v_cmd.data_routing = TO_SB then
-                    -- call SB check_received
-                    alert(tb_warning, "Scoreboard type for AXIStream RECEIVE data not implemented");
+                     -- call SB check_received
+                     alert(tb_warning, "Scoreboard type for AXIStream RECEIVE data not implemented");
                   else                            
                      -- Store the result
                      work.td_vvc_entity_support_pkg.store_result( result_queue => result_queue,
@@ -346,7 +346,6 @@ begin
                else
                   alert(TB_ERROR, "Sanity check: Method call only makes sense for slave (sink) VVC", C_SCOPE);
                end if;
-
 
             when EXPECT =>
                if not GC_VVC_IS_MASTER then
@@ -408,10 +407,8 @@ begin
          last_cmd_idx_executed <= v_cmd.cmd_idx;
          -- Reset the transaction info for waveview
          transaction_info   := C_TRANSACTION_INFO_DEFAULT;
-
-        -- Set vvc transaction info back to default values
-        reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
-
+         -- Set VVC Transaction Info back to default values
+         reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
       end loop;
    end process;
 --========================================================================================================================

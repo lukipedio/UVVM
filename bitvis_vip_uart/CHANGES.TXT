@@ -1,6 +1,34 @@
 Bitvis VIP UART - Overview on Versions and Changes
 ==============================================================
 
+v2.8.3
+----------
+Released: 2021-05-26
+- Corrected message ID for check_value() in BFM.
+
+v2.8.2
+----------
+Released: 2020-04-08
+- Minor update in uart_receive example in VVC QuickRef.
+
+v2.8.1
+----------
+Released: 2020-12-08
+- Added how to start demo testbench from within Modelsim to testbench_guide PDF.
+- Added max_receptions default value to uart_bfm_quickref.pdf.
+
+v2.8.0
+----------
+Released: 2020-10-06
+- Added UART_VVC_SB scoreboard.
+
+v2.7.2
+----------
+Released: 2020-08-18
+- Fixed missing reset of cmd termination flag in UART TX VVC.
+- Fixed missing possibility for exiting a TRANSMIT loop.
+- Added section with required local defined BFM configuration in BFM QR.
+
 v2.7.1
 ----------
 Released: 2020-06-23

@@ -1,6 +1,36 @@
 Bitvis VIP Axilite (AXI4-Lite) - Overview on Versions and Changes
 ==============================================================
 
+
+v2.8.3
+----------
+Released: 2021-05-26
+- Corrected message ID for check_value() in BFM.
+
+
+v2.8.2
+----------
+Released: 2021-04-08
+- Fixed "bad handle or reference" fatal error that happened in some versions of Modelsim
+- Fixed wrong file and library names in compile_bfm.do
+- Fixed compilation error in Riviera Pro
+
+v2.8.1
+----------
+Released: 2020-12-08
+- Updated missing info in CHANGES.TXT
+
+v2.8.0
+----------
+Released: 2020-10-06
+- Added support for independent channels in VVC
+- Added AXILITE_VVC_SB scoreboard and pad_axilite_sb() method.
+- Changes in the BFM configuration record:
+- - Renamed t_axilite_response_status to t_xresp
+- - Renamed t_axilite_protection to t_axprot
+- - Fixed typos in the t_axprot record elements
+- - Fixed incorrect values when converting from the t_axprot record element to slv
+
 v2.7.1
 ----------
 Released: 2020-06-23

@@ -24,9 +24,6 @@ context uvvm_util.uvvm_util_context;
 library uvvm_vvc_framework;
 use uvvm_vvc_framework.ti_vvc_framework_support_pkg.all;
 
-library bitvis_vip_scoreboard;
-use bitvis_vip_scoreboard.generic_sb_support_pkg.all;
-
 use work.transaction_pkg.all;
 use work.uart_bfm_pkg.all;
 use work.vvc_methods_pkg.all;
@@ -37,7 +34,6 @@ use work.td_cmd_queue_pkg.all;
 use work.td_result_queue_pkg.all;
 
 
---=================================================================================================
 entity uart_tx_vvc is
   generic (
     GC_DATA_WIDTH                            : natural           := 8;
@@ -56,9 +52,6 @@ entity uart_tx_vvc is
     );
 end entity uart_tx_vvc;
 
-
---=================================================================================================
---=================================================================================================
 
 architecture behave of uart_tx_vvc is
 
@@ -333,6 +326,11 @@ begin
 
             -- Set transaction info back to default values
             reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
+
+            -- exit loop if terminate_current_cmd is requested
+            if terminate_current_cmd.is_active = '1' then
+              exit;
+            end if;           
           end loop;
 
 
@@ -340,12 +338,10 @@ begin
           log(ID_INSERTED_DELAY, "Running: " & to_string(v_cmd.proc_call) & " " & format_command_idx(v_cmd), C_SCOPE, v_msg_id_panel);
           if v_cmd.gen_integer_array(0) = -1 then
             -- Delay specified using time
-            wait until terminate_current_cmd.is_active = '1'
-              for v_cmd.delay;
+            wait until terminate_current_cmd.is_active = '1' for v_cmd.delay;
           else
             -- Delay specified using integer
-            wait until terminate_current_cmd.is_active = '1'
-              for v_cmd.gen_integer_array(0) * vvc_config.bfm_config.bit_time;
+            wait until terminate_current_cmd.is_active = '1' for (v_cmd.gen_integer_array(0) * vvc_config.bfm_config.bit_time);
           end if;
 
         when others =>
@@ -362,11 +358,16 @@ begin
         end if;
       end if;
 
+      -- Reset terminate flag if any occurred
+      if (terminate_current_cmd.is_active = '1') then
+        log(ID_CMD_EXECUTOR, "Termination request received", C_SCOPE, v_msg_id_panel);
+        uvvm_vvc_framework.ti_vvc_framework_support_pkg.reset_flag(terminate_current_cmd);
+      end if;
+
       last_cmd_idx_executed <= v_cmd.cmd_idx;
       -- Reset the transaction info for waveview
       transaction_info      := C_TRANSACTION_INFO_DEFAULT;
-
-      -- Set transaction info back to default values
+      -- Set VVC Transaction Info back to default values
       reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
     end loop;
   end process;

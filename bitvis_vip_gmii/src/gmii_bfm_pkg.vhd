@@ -93,7 +93,7 @@ package gmii_bfm_pkg is
   -- BFM -> DUT
   ---------------------------------------------------------------------------------------------
   procedure gmii_write (
-    constant data_array   : in    t_byte_array;
+    constant data_array   : in    t_slv_array;
     constant msg          : in    string            := "";
     signal   gmii_tx_if   : inout t_gmii_tx_if;
     constant scope        : in    string            := C_SCOPE;
@@ -106,7 +106,7 @@ package gmii_bfm_pkg is
   -- DUT -> BFM
   ---------------------------------------------------------------------------------------------
   procedure gmii_read (
-    variable data_array    : out   t_byte_array;
+    variable data_array    : out   t_slv_array;
     variable data_len      : out   natural;
     constant msg           : in    string            := "";
     signal   gmii_rx_if    : inout t_gmii_rx_if;
@@ -120,7 +120,7 @@ package gmii_bfm_pkg is
   -- GMII Expect
   ---------------------------------------------------------------------------------------------
   procedure gmii_expect (
-    constant data_exp     : in    t_byte_array;
+    constant data_exp     : in    t_slv_array;
     constant msg          : in    string            := "";
     signal   gmii_rx_if   : inout t_gmii_rx_if;
     constant alert_level  : in    t_alert_level     := ERROR;
@@ -161,7 +161,7 @@ package body gmii_bfm_pkg is
   -- BFM -> DUT
   ---------------------------------------------------------------------------------------------
   procedure gmii_write(
-    constant data_array   : in    t_byte_array;
+    constant data_array   : in    t_slv_array;
     constant msg          : in    string            := "";
     signal   gmii_tx_if   : inout t_gmii_tx_if;
     constant scope        : in    string            := C_SCOPE;
@@ -211,7 +211,7 @@ package body gmii_bfm_pkg is
   -- DUT -> BFM
   ---------------------------------------------------------------------------------------------
   procedure gmii_read(
-    variable data_array    : out   t_byte_array;
+    variable data_array    : out   t_slv_array;
     variable data_len      : out   natural;
     constant msg           : in    string            := "";
     signal   gmii_rx_if    : inout t_gmii_rx_if;
@@ -223,7 +223,7 @@ package body gmii_bfm_pkg is
     constant local_proc_name        : string := "gmii_read"; -- Internal proc_name; Used if called from sequencer or VVC
     constant local_proc_call        : string := local_proc_name & "(" & to_string(data_array'length) & " bytes)";
     variable v_proc_call            : line; -- Current proc_call, external or local
-    variable v_normalized_data      : t_byte_array(0 to data_array'length-1);
+    variable v_normalized_data      : t_slv_array(0 to data_array'length-1)(7 downto 0);
     variable v_time_of_rising_edge  : time := -1 ns;  -- time stamp for clk period checking
     variable v_time_of_falling_edge : time := -1 ns;  -- time stamp for clk period checking
     variable v_byte_cnt             : natural := 0;
@@ -307,13 +307,15 @@ package body gmii_bfm_pkg is
         -- Log will be handled by calling procedure (e.g. gmii_expect)
       end if;
     end if;
+
+    DEALLOCATE(v_proc_call);
   end procedure;
 
   ---------------------------------------------------------------------------------------------
   -- GMII Expect
   ---------------------------------------------------------------------------------------------
   procedure gmii_expect (
-    constant data_exp     : in    t_byte_array;
+    constant data_exp     : in    t_slv_array;
     constant msg          : in    string             := "";
     signal   gmii_rx_if   : inout t_gmii_rx_if;
     constant alert_level  : in    t_alert_level      := ERROR;
@@ -323,8 +325,8 @@ package body gmii_bfm_pkg is
   ) is
     constant proc_name          : string := "gmii_expect";
     constant proc_call          : string := proc_name & "(" & to_string(data_exp'length) & " bytes)";
-    variable v_normalized_data  : t_byte_array(0 to data_exp'length-1) := data_exp;
-    variable v_rx_data_array    : t_byte_array(v_normalized_data'range);
+    variable v_normalized_data  : t_slv_array(0 to data_exp'length-1)(7 downto 0) := data_exp;
+    variable v_rx_data_array    : t_slv_array(v_normalized_data'range)(7 downto 0);
     variable v_rx_data_len      : natural;
     variable v_length_error     : boolean := false;
     variable v_data_error_cnt   : natural := 0;
@@ -347,7 +349,7 @@ package body gmii_bfm_pkg is
     for byte in v_rx_data_array'high downto 0 loop
       for i in v_rx_data_array(byte)'range loop
         -- Allow don't care in expected value and use match strictness from config for comparison
-        if v_normalized_data(byte)(i) = '-' or check_value(v_rx_data_array(byte)(i), v_normalized_data(byte)(i), config.match_strictness, NO_ALERT, msg) then
+        if v_normalized_data(byte)(i) = '-' or check_value(v_rx_data_array(byte)(i), v_normalized_data(byte)(i), config.match_strictness, NO_ALERT, msg, scope, ID_NEVER) then
           -- Check is OK
         else
           -- Received byte doesn't match
@@ -363,7 +365,7 @@ package body gmii_bfm_pkg is
         ". Expected " & to_string(v_normalized_data'length) & "." & LF & add_msg_delimiter(msg), scope);
     elsif v_data_error_cnt /= 0 then
       -- Use binary representation when mismatch is due to weak signals
-      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data_array(v_first_wrong_byte), v_normalized_data(v_first_wrong_byte), MATCH_STD, NO_ALERT, msg) else HEX;
+      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data_array(v_first_wrong_byte), v_normalized_data(v_first_wrong_byte), MATCH_STD, NO_ALERT, msg, scope, HEX_BIN_IF_INVALID, KEEP_LEADING_0, ID_NEVER) else HEX;
       alert(alert_level, proc_call & "=> Failed in "& to_string(v_data_error_cnt) & " data bits. First mismatch in byte# " &
         to_string(v_first_wrong_byte) & ". Was " & to_string(v_rx_data_array(v_first_wrong_byte), v_alert_radix, AS_IS, INCL_RADIX) &
         ". Expected " & to_string(v_normalized_data(v_first_wrong_byte), v_alert_radix, AS_IS, INCL_RADIX) & "." & LF & add_msg_delimiter(msg), scope);

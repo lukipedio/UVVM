@@ -25,7 +25,7 @@ library uvvm_vvc_framework;
 use uvvm_vvc_framework.ti_vvc_framework_support_pkg.all;
 
 library bitvis_vip_scoreboard;
-use bitvis_vip_scoreboard.generic_sb_support_pkg.all;
+use bitvis_vip_scoreboard.generic_sb_support_pkg.C_SB_CONFIG_DEFAULT;
 
 use work.transaction_pkg.all;
 use work.uart_bfm_pkg.all;
@@ -36,8 +36,6 @@ use work.td_vvc_entity_support_pkg.all;
 use work.td_cmd_queue_pkg.all;
 use work.td_result_queue_pkg.all;
 
-
---=================================================================================================
 entity uart_rx_vvc is
   generic (
     GC_DATA_WIDTH                            : natural           := 8;
@@ -56,9 +54,6 @@ entity uart_rx_vvc is
     );
 end entity uart_rx_vvc;
 
-
---=================================================================================================
---=================================================================================================
 
 architecture behave of uart_rx_vvc is
 
@@ -313,20 +308,17 @@ begin
                 
           -- Request SB check result
           if v_cmd.data_routing = TO_SB then
-
+            -- pad 8th bit as don't care if rx is 7 bits
             if v_num_data_bits = 7 then
               v_read_data(7) := '-';
             end if;
-
             -- call SB check_received
-            UART_VVC_SB.check_received(GC_INSTANCE_IDX, v_read_data(GC_DATA_WIDTH-1 downto 0));
-
+            UART_VVC_SB.check_received(GC_INSTANCE_IDX, v_read_data);
           else
             work.td_vvc_entity_support_pkg.store_result(result_queue => result_queue,
                                                          cmd_idx     => v_cmd.cmd_idx,
                                                          result      => v_read_data);
           end if;
-              
 
         when EXPECT =>
           -- Set transaction info
@@ -347,18 +339,14 @@ begin
                       scope                 => C_SCOPE,
                       msg_id_panel          => v_msg_id_panel);
 
-
-
         when INSERT_DELAY =>
           log(ID_INSERTED_DELAY, "Running: " & to_string(v_cmd.proc_call) & " " & format_command_idx(v_cmd), C_SCOPE, v_msg_id_panel);
           if v_cmd.gen_integer_array(0) = -1 then
             -- Delay specified using time
-            wait until terminate_current_cmd.is_active = '1'
-              for v_cmd.delay;
+            wait until terminate_current_cmd.is_active = '1' for v_cmd.delay;
           else
             -- Delay specified using integer
-            wait until terminate_current_cmd.is_active = '1'
-              for v_cmd.gen_integer_array(0) * vvc_config.bfm_config.bit_time;
+            wait until terminate_current_cmd.is_active = '1' for (v_cmd.gen_integer_array(0) * vvc_config.bfm_config.bit_time);
           end if;
 
         when others =>
@@ -384,8 +372,7 @@ begin
       last_cmd_idx_executed <= v_cmd.cmd_idx;
       -- Reset the transaction info for waveview
       transaction_info      := C_TRANSACTION_INFO_DEFAULT;
-
-      -- Set transaction info back to default values
+      -- Set VVC Transaction Info back to default values
       reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
     end loop;
   end process;

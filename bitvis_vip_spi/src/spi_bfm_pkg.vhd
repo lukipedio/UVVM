@@ -597,6 +597,8 @@ package body spi_bfm_pkg is
     else
       -- Log will be handled by calling procedure (e.g. spi_master_transmit_and_check)
     end if;
+
+    DEALLOCATE(v_proc_call);
   end procedure;
 
   -- Single-word
@@ -682,7 +684,7 @@ package body spi_bfm_pkg is
 
     for i in data_exp'range loop
       -- Allow don't care in expected value and use match strictness from config for comparison
-      if data_exp(i) = '-' or check_value(v_rx_data(i), data_exp(i), config.match_strictness, NO_ALERT, msg) then
+      if data_exp(i) = '-' or check_value(v_rx_data(i), data_exp(i), config.match_strictness, NO_ALERT, msg, scope, ID_NEVER) then
         v_check_ok := true;
       else
         v_check_ok := false;
@@ -692,7 +694,7 @@ package body spi_bfm_pkg is
 
     if not v_check_ok then
       -- Use binary representation when mismatch is due to weak signals
-      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data, data_exp, MATCH_STD, NO_ALERT, msg) else HEX;
+      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data, data_exp, MATCH_STD, NO_ALERT, msg, scope, HEX_BIN_IF_INVALID, KEEP_LEADING_0, ID_NEVER) else HEX;
       alert(alert_level, local_proc_call & "=> Failed. Was " & to_string(v_rx_data, v_alert_radix, AS_IS, INCL_RADIX) & ". Expected " & to_string(data_exp, v_alert_radix, AS_IS, INCL_RADIX) & "." & LF & add_msg_delimiter(msg), scope);
     else
       log(config.id_for_bfm, local_proc_call & "=> OK, read data = " & to_string(v_rx_data, HEX, SKIP_LEADING_0, INCL_RADIX) & ". " & add_msg_delimiter(msg), scope, msg_id_panel);
@@ -872,7 +874,7 @@ package body spi_bfm_pkg is
 
     for i in data_exp'range loop
       -- Allow don't care in expected value and use match strictness from config for comparison
-      if data_exp(i) = '-' or check_value(v_rx_data(i), data_exp(i), config.match_strictness, NO_ALERT, msg) then
+      if data_exp(i) = '-' or check_value(v_rx_data(i), data_exp(i), config.match_strictness, NO_ALERT, msg, scope, ID_NEVER) then
         v_check_ok := true;
       else
         v_check_ok := false;
@@ -882,7 +884,7 @@ package body spi_bfm_pkg is
 
     if not v_check_ok then
       -- Use binary representation when mismatch is due to weak signals
-      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data, data_exp, MATCH_STD, NO_ALERT, msg) else HEX;
+      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data, data_exp, MATCH_STD, NO_ALERT, msg, scope, HEX_BIN_IF_INVALID, KEEP_LEADING_0, ID_NEVER) else HEX;
       alert(alert_level, local_proc_call & "=> Failed. Was " & to_string(v_rx_data, v_alert_radix, AS_IS, INCL_RADIX) & ". Expected " & to_string(data_exp, v_alert_radix, AS_IS, INCL_RADIX) & "." & LF & add_msg_delimiter(msg), scope);
     else
       log(config.id_for_bfm, local_proc_call & "=> OK, read data = " & to_string(v_rx_data, HEX, SKIP_LEADING_0, INCL_RADIX) & ". " & add_msg_delimiter(msg), scope, msg_id_panel);
@@ -1043,6 +1045,8 @@ package body spi_bfm_pkg is
     else
       -- Log will be handled by calling procedure (e.g. spi_master_transmit_and_check)
     end if;
+
+    DEALLOCATE(v_proc_call);
  end procedure;
 
   procedure spi_slave_transmit_and_receive (
@@ -1109,7 +1113,7 @@ package body spi_bfm_pkg is
 
     for i in data_exp'range loop
       -- Allow don't care in expected value and use match strictness from config for comparison
-      if data_exp(i) = '-' or check_value(v_rx_data(i), data_exp(i), config.match_strictness, NO_ALERT, msg) then
+      if data_exp(i) = '-' or check_value(v_rx_data(i), data_exp(i), config.match_strictness, NO_ALERT, msg, scope, ID_NEVER) then
         v_check_ok := true;
       else
         v_check_ok := false;
@@ -1119,7 +1123,7 @@ package body spi_bfm_pkg is
 
     if not v_check_ok then
       -- Use binary representation when mismatch is due to weak signals
-      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data, data_exp, MATCH_STD, NO_ALERT, msg) else HEX;
+      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data, data_exp, MATCH_STD, NO_ALERT, msg, scope, HEX_BIN_IF_INVALID, KEEP_LEADING_0, ID_NEVER) else HEX;
       alert(alert_level, local_proc_call & "=> Failed. Was " & to_string(v_rx_data, v_alert_radix, AS_IS, INCL_RADIX) & ". Expected " & to_string(data_exp, v_alert_radix, AS_IS, INCL_RADIX) & "." & LF & add_msg_delimiter(msg), scope);
     else
       log(config.id_for_bfm, local_proc_call & "=> OK, read data = " & to_string(v_rx_data, HEX, SKIP_LEADING_0, INCL_RADIX) & ". " & add_msg_delimiter(msg), scope, msg_id_panel);
@@ -1253,7 +1257,7 @@ package body spi_bfm_pkg is
 
     for i in data_exp'range loop
       -- Allow don't care in expected value and use match strictness from config for comparison
-      if data_exp(i) = '-' or check_value(v_rx_data(i), data_exp(i), config.match_strictness, NO_ALERT, msg) then
+      if data_exp(i) = '-' or check_value(v_rx_data(i), data_exp(i), config.match_strictness, NO_ALERT, msg, scope, ID_NEVER) then
         v_check_ok := true;
       else
         v_check_ok := false;
@@ -1263,7 +1267,7 @@ package body spi_bfm_pkg is
 
     if not v_check_ok then
       -- Use binary representation when mismatch is due to weak signals
-      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data, data_exp, MATCH_STD, NO_ALERT, msg) else HEX;
+      v_alert_radix := BIN when config.match_strictness = MATCH_EXACT and check_value(v_rx_data, data_exp, MATCH_STD, NO_ALERT, msg, scope, HEX_BIN_IF_INVALID, KEEP_LEADING_0, ID_NEVER) else HEX;
       alert(alert_level, local_proc_call & "=> Failed. Was " & to_string(v_rx_data, v_alert_radix, AS_IS, INCL_RADIX) & ". Expected " & to_string(data_exp, v_alert_radix, AS_IS, INCL_RADIX) & "." & LF & add_msg_delimiter(msg), scope);
     else
       log(config.id_for_bfm, local_proc_call & "=> OK, read data = " & to_string(v_rx_data, HEX, SKIP_LEADING_0, INCL_RADIX) & ". " & add_msg_delimiter(msg), scope, msg_id_panel);

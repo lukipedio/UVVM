@@ -35,7 +35,7 @@ context bitvis_vip_ethernet.vvc_context;
 
 use work.ethernet_mac_pkg.all;
 
-
+--hdlunit:tb
 -- Test case entity
 entity ethernet_sbi_gmii_demo_tb is
 end entity ethernet_sbi_gmii_demo_tb;
@@ -181,7 +181,7 @@ begin
     -- Ending the simulation
     -----------------------------------------------------------------------------
     wait for 1000 ns;             -- Allow some time for completion
-    ETHERNET_VVC_SB.report_counters(ALL_ENABLED_INSTANCES);
+    ETHERNET_VVC_SB.report_counters(ALL_INSTANCES);
     report_alert_counters(FINAL); -- Report final counters and print conclusion (Success/Fail)
     log(ID_LOG_HDR, "SIMULATION COMPLETED", C_SCOPE);
     -- Finish the simulation

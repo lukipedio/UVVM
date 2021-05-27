@@ -3,6 +3,60 @@ UVVM Utility Library - Overview on Versions and Changes
 
 ----------------------------------------------------------------------
 
+
+v2.17.0
+----------
+Released: 2021-05-26
+- Added MATCH_STD_INCL_Z to await_value() for SL and SLV.
+- Summary alert report and hierarchical alerts report updated to 
+  warn for minor alert mismatch.
+- Generic queue allow to insert to an empty queue with identifier position
+  set to POSITION and position set to 1.
+- Fixed bug in check_counters that would cause the counter value to
+  increase to quickly.
+- Added C_ENABLE_CHECK_COUNTER to adaptations_pkg, default set to True.
+- Fixed an issue with VVC name indexing in ti_protected_types_pkg priv_get_vvc_idx().
+- Added some missing deallocating of lines in in methods_pkg.
+
+v2.16.0
+----------
+Released: 2021-04-08
+- Fixed width detection method for to_string() functions that would make
+  GHDL simulator fail or create null arrays.
+- Moved timestamp_header() function from generic_sb_pkg to string_methods_pkg.
+- Added t_natural_vector and t_positive_vector types to types_pkg.
+- Added to_string() overloads for t_natural_vector, integer_vector, real_vector and time_vector types.
+
+v2.15.1
+----------
+Released: 2020-12-08
+- Fixed to_string(integer) function using a negative value.
+- Fixed random time function by using the simulator base time unit instead of ns.
+- Fixed random function overflowing with maximum values in min/max range.
+- Removed unused constant C_USE_LOCAL_OSVVM_MSG_ID_PANELS from adaptations_pkg.
+- Moved C_HIERARCHY_NODE_NAME_LENGTH from types_pkg to adaptations_pkg.
+- Added C_SPI_VVC_DATA_ARRAY_WIDTH to adaptation_pkg.
+
+v2.15.0
+----------
+Released: 2020-10-06
+- Added constant C_UVVM_VERSION with UVVM release version number.
+- Corrected normalize_and_check() description in QR.
+- Corrected default KEEP_LEADING_0 for check_value() in QR.
+- Removed SLV range check for t_slv_array version of normalize_and_check().
+
+v2.14.2
+----------
+Released: 2020-08-21
+- Added missing queue, FIFO and stack in Util package.
+
+v2.14.1
+----------
+Released: 2020-08-18
+- Removed C_VVCT_ALL_INSTANCES as it is a duplicate of ALL_INSTANCES. 
+- Added fix with gen_pulse() method for slv with don't care.
+- Added more info to set_log_destination method in Util QR.
+
 v2.14.0
 ----------
 Released: 2020-05-19

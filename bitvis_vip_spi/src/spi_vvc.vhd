@@ -25,7 +25,7 @@ library uvvm_vvc_framework;
 use uvvm_vvc_framework.ti_vvc_framework_support_pkg.all;
 
 library bitvis_vip_scoreboard;
-use bitvis_vip_scoreboard.generic_sb_support_pkg.all;
+use bitvis_vip_scoreboard.generic_sb_support_pkg.C_SB_CONFIG_DEFAULT;
 
 use work.spi_bfm_pkg.all;
 use work.vvc_methods_pkg.all;
@@ -41,7 +41,7 @@ use work.transaction_pkg.all;
 entity spi_vvc is
   generic (
     GC_DATA_WIDTH                            : natural          := 8;
-    GC_DATA_ARRAY_WIDTH                      : natural          := 32;
+    GC_DATA_ARRAY_WIDTH                      : natural          := C_SPI_VVC_DATA_ARRAY_WIDTH;
     GC_INSTANCE_IDX                          : natural          := 1;  -- Instance index for this SPI_VVCT instance
     GC_MASTER_MODE                           : boolean          := true;
     GC_SPI_CONFIG                            : t_spi_bfm_config := C_SPI_BFM_CONFIG_DEFAULT;  -- Behavior specification for BFM
@@ -351,7 +351,7 @@ begin
               -- Request SB check result
               if v_cmd.data_routing = TO_SB then
                 -- call SB check_received
-                SPI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_sb_slv(v_result(i)(GC_DATA_WIDTH-1 downto 0)));
+                SPI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_spi_sb(v_result(i)(GC_DATA_WIDTH-1 downto 0)));
               else                            
                 work.td_vvc_entity_support_pkg.store_result(result_queue => result_queue,
                                                             cmd_idx      => v_cmd.cmd_idx,
@@ -461,7 +461,7 @@ begin
               -- Request SB check result
               if v_cmd.data_routing = TO_SB then
                 -- call SB check_received
-                SPI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_sb_slv(v_result(i)(GC_DATA_WIDTH-1 downto 0)));
+                SPI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_spi_sb(v_result(i)(GC_DATA_WIDTH-1 downto 0)));
               else                            
                 work.td_vvc_entity_support_pkg.store_result(result_queue => result_queue,
                                                             cmd_idx      => v_cmd.cmd_idx,
@@ -541,7 +541,7 @@ begin
               -- Request SB check result
               if v_cmd.data_routing = TO_SB then
                 -- call SB check_received
-                SPI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_sb_slv(v_result(i)(GC_DATA_WIDTH-1 downto 0)));
+                SPI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_spi_sb(v_result(i)(GC_DATA_WIDTH-1 downto 0)));
               else                            
                 work.td_vvc_entity_support_pkg.store_result(result_queue => result_queue,
                                                             cmd_idx      => v_cmd.cmd_idx,
@@ -647,7 +647,7 @@ begin
               -- Request SB check result
               if v_cmd.data_routing = TO_SB then
                 -- call SB check_received
-                SPI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_sb_slv(v_result(i)(GC_DATA_WIDTH-1 downto 0)));
+                SPI_VVC_SB.check_received(GC_INSTANCE_IDX, pad_spi_sb(v_result(i)(GC_DATA_WIDTH-1 downto 0)));
               else                            
                 work.td_vvc_entity_support_pkg.store_result(result_queue => result_queue,
                                                             cmd_idx      => v_cmd.cmd_idx,
@@ -725,10 +725,8 @@ begin
       last_cmd_idx_executed <= v_cmd.cmd_idx;
       -- Reset the transaction info for waveview
       transaction_info      := C_TRANSACTION_INFO_DEFAULT;
-
-      -- Set vvc transaction info back to default values
+      -- Set VVC Transaction Info back to default values
       reset_vvc_transaction_info(vvc_transaction_info, v_cmd);
-
     end loop;
   end process;
 --========================================================================================================================
