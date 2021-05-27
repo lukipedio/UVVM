@@ -33,7 +33,7 @@ class Channel:
     #def append_executor(self, name):
      #   self.executor_names.append(name)
     def append_executor(self, names):
-        for name in range(0, len(names)):
+        for name in range(len(names)):
             self.executor_names.append(names[name])
     def number_of_executors(self):
         return len(self.executor_names)
@@ -48,8 +48,8 @@ def print_linefeed(file_handle):
 def fill_with_n_spaces(used_spaces, required_spaces):
     retstr = ""
     if required_spaces >= used_spaces:
-        for i in range(required_spaces-used_spaces):
-            retstr = retstr + " "
+        for _ in range(required_spaces-used_spaces):
+            retstr += " "
     return retstr
 
 
@@ -69,10 +69,10 @@ def is_input_vhdl_legal(requested_vvc_name):
 
 def get_user_input(txt = "\rPlease select 'Y' or 'N': "):
     raw_input = ""
-    while not(raw_input.lower() == "y" or raw_input.lower() == "n"):
-        raw_input = input(txt)   
+    while not raw_input.lower() in ["y", "n"]:
+        raw_input = input(txt)
         try:
-            if not(raw_input.lower() == "y" or raw_input.lower() == "n"):
+            if not raw_input.lower() in ["y", "n"]:
                 print("Please select 'Y' or 'N'!")
         except:
             print("Please select 'Y' or 'N'!")
@@ -88,7 +88,7 @@ def get_generating_level():
     print("generated with extended UVVM features such as Scoreboard and transaction info.")
     selected_features = extended_features.copy()
     extended_selection = None
-    while extended_selection == None:
+    while extended_selection is None:
         raw_input = input("\rGenerate VVC with extended UVVM features? [y/n]: ")
         if raw_input == "":
             extended_selection = False
@@ -212,9 +212,7 @@ def is_multi_queue_channel():
         print("\nMultiple executors (and queues) are used when concurrent command operations are needed.\nE.g. Avalon MM uses two executors because multiple read requests might be sent before receiving the responses.\nThus the first executor is sending out the commands, whereas the second executor is receiving the response.\nBoth are required because the first executor may be busy issuing a new command at the same time the second executor is receiving a response on a previous command.")
         choice = input("\rUse multiple executors for this channel? [y/n]: ")
         choice = choice.lower()
-        if choice == 'y':
-            input_accepted = True
-        elif choice == 'n':
+        if choice in ['y', 'n']:
             input_accepted = True
         else:
             print("Input not accepted. Please use either y or n")
@@ -250,7 +248,7 @@ def get_list_of_executors():
     number_of_executors = get_number_of_executors()
     executor_names = []
     if number_of_executors > 1:
-        for i in range(1, number_of_executors):
+        for _ in range(1, number_of_executors):
             executor_names.append(get_executor_name())
     return executor_names
 
@@ -1657,30 +1655,27 @@ def add_bfm_pkg_body(file_handle, vvc_name):
 
 
 def generate_bfm_skeleton(vvc_name):
-    f = open("output/"+vvc_name.lower()+"_bfm_pkg.vhd", 'w')
-    add_vvc_header(f)
-    add_bfm_pkg_includes(f)
-    add_bfm_pkg_header(f, vvc_name)
-    add_bfm_pkg_body(f, vvc_name)
-    f.close()
+    with open("output/"+vvc_name.lower()+"_bfm_pkg.vhd", 'w') as f:
+        add_vvc_header(f)
+        add_bfm_pkg_includes(f)
+        add_bfm_pkg_header(f, vvc_name)
+        add_bfm_pkg_body(f, vvc_name)
 
 
 def generate_vvc_methods_pkg_file(vvc_name, vvc_channels, features):
-    f = open("output/vvc_methods_pkg.vhd", 'w')
-    add_vvc_header(f)
-    add_methods_pkg_includes(f, vvc_name, features)
-    add_methods_pkg_header(f,vvc_name,vvc_channels, features)
-    add_methods_pkg_body(f, vvc_name, features)
-    f.close()
+    with open("output/vvc_methods_pkg.vhd", 'w') as f:
+        add_vvc_header(f)
+        add_methods_pkg_includes(f, vvc_name, features)
+        add_methods_pkg_header(f,vvc_name,vvc_channels, features)
+        add_methods_pkg_body(f, vvc_name, features)
 
 
 def generate_vvc_cmd_pkg_file(features):
-    f = open("output/vvc_cmd_pkg.vhd", 'w')
-    add_vvc_header(f)
-    add_vvc_cmd_pkg_includes(f, features)
-    add_vvc_cmd_pkg_header(f, features)
-    add_vvc_cmd_pkg_body(f)
-    f.close()
+    with open("output/vvc_cmd_pkg.vhd", 'w') as f:
+        add_vvc_header(f)
+        add_vvc_cmd_pkg_includes(f, features)
+        add_vvc_cmd_pkg_header(f, features)
+        add_vvc_cmd_pkg_body(f)
 
 
 def add_transaction_pkg(file_handle, vvc_name, vvc_channels, features):
@@ -1813,9 +1808,8 @@ def add_transaction_pkg(file_handle, vvc_name, vvc_channels, features):
 
 def generate_transaction_pkg_file(vvc_name, vvc_channels, features):
     if features["transaction_pkg"]:
-        f = open("output/transaction_pkg.vhd", 'w')
-        add_transaction_pkg(f, vvc_name, vvc_channels, features)
-        f.close()
+        with open("output/transaction_pkg.vhd", 'w') as f:
+            add_transaction_pkg(f, vvc_name, vvc_channels, features)
 
 def add_vvc_context(file_handle, vvc_name, features):
     add_vvc_header(file_handle)
@@ -1831,9 +1825,8 @@ def add_vvc_context(file_handle, vvc_name, features):
     file_handle.write("end context;\n")
 
 def generate_vvc_context_file(vvc_name, features):
-    f = open("output/vvc_context.vhd", 'w')
-    add_vvc_context(f, vvc_name, features)
-    f.close()
+    with open("output/vvc_context.vhd", 'w') as f:
+        add_vvc_context(f, vvc_name, features)
 
 def generate_vvc_file(vvc_name, vvc_channels, features):
 
@@ -1846,38 +1839,32 @@ def generate_vvc_file(vvc_name, vvc_channels, features):
             vvc_file_name = "output/"+vvc_name.lower()+"_vvc.vhd"
         else:
             vvc_file_name = "output/"+vvc_name.lower()+"_"+channel.name.lower()+"_vvc.vhd"
-        f = open(vvc_file_name, 'w')
+        with open(vvc_file_name, 'w') as f:
+            add_vvc_header(f)
+            add_leaf_includes(f,vvc_name, features)
+            add_vvc_entity(f,vvc_name,channel.name)
+            add_architecture_declaration(f, vvc_name, channel, features, num_of_queues)
+            add_vvc_constructor(f, vvc_name)
+            add_vvc_interpreter(f, channel, features, num_of_queues)
+            add_vvc_executor(f, channel, features)
+            if (num_of_queues > 1):
+                for i in range(1, num_of_queues):
+                    add_vvc_pipeline_step(f, channel.executor_names[i], features)
 
-        add_vvc_header(f)
-        add_leaf_includes(f,vvc_name, features)
-        add_vvc_entity(f,vvc_name,channel.name)
-        add_architecture_declaration(f, vvc_name, channel, features, num_of_queues)
-        add_vvc_constructor(f, vvc_name)
-        add_vvc_interpreter(f, channel, features, num_of_queues)
-        add_vvc_executor(f, channel, features)
-        if (num_of_queues > 1):
-            for i in range(1, num_of_queues):
-                add_vvc_pipeline_step(f, channel.executor_names[i], features)
-
-        add_vvc_terminator(f)
-        add_end_of_architecture(f)
-
-        f.close()
+            add_vvc_terminator(f)
+            add_end_of_architecture(f)
 
     # Create wrapper if multiple channels
     if vvc_channels.__len__() != 1:
         vvc_file_name = "output/"+vvc_name.lower()+"_vvc.vhd"
-        f = open(vvc_file_name, 'w')
-
-        add_vvc_header(f)
-        add_wrapper_includes(f,vvc_name)
-        add_vvc_entity(f,vvc_name,"NA")
-        add_wrapper_architecture_declaration(f, vvc_name)
-        for channel in vvc_channels:
-            add_leaf_vvc_entity(f, vvc_name, channel.name)
-        add_wrapper_architecture_end(f)
-
-        f.close()
+        with open(vvc_file_name, 'w') as f:
+            add_vvc_header(f)
+            add_wrapper_includes(f,vvc_name)
+            add_vvc_entity(f,vvc_name,"NA")
+            add_wrapper_architecture_declaration(f, vvc_name)
+            for channel in vvc_channels:
+                add_leaf_vvc_entity(f, vvc_name, channel.name)
+            add_wrapper_architecture_end(f)
 
 
 # Entry point for the vvc_generator script
